@@ -1,0 +1,29 @@
+forge 'https://forge.example.com'
+moduledir 'thirdparty'
+
+mod 'puppetlabs/apt', '11.2.0'
+mod 'puppetlabs/stdlib', '9.6.0'
+mod 'puppetlabs/apache'
+mod 'puppetlabs/ntp', :latest
+mod 'example/local',
+  :path => 'modules/example/local'
+mod 'broken-module',
+  :git => 'https://git.example.com/platform/broken-module.git'
+mod "example-nginx",
+  :git => "https://git.example.com/platform/example-nginx.git",
+  :tag => "2.4.1"
+mod 'example/redis',
+  git: 'https://git.example.com/platform/example-redis.git',
+  branch: 'main'
+mod 'example-ref',
+  :git => 'https://git.example.com/platform/example-ref.git',
+  :ref => 'release-2026'
+mod 'example-commit',
+  :git => 'https://git.example.com/platform/example-commit.git',
+  :commit => '8df51aa'
+mod 'example-data',
+  :git => 'https://git.example.com/platform/example-data.git',
+  :branch => :control_branch,
+  :default_branch => 'main',
+  :install_path => 'hieradata',
+  :exclude_spec => false

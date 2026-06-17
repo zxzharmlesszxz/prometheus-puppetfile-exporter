@@ -1,0 +1,14 @@
+# Exporter config keys:
+# - puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile
+#
+# Examples:
+# - single Puppetfile:
+#   puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile
+# - multiple explicit files:
+#   puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile,/etc/puppetlabs/code/environments/development/Puppetfile
+# - all environment Puppetfiles with a glob:
+#   puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile
+# - comma-separated glob plus explicit file:
+#   puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile,/opt/puppetlabs/extra/Puppetfile
+#
+puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile

@@ -1,0 +1,122 @@
+groups:
+  - name: puppetfile-exporter
+    rules:
+      - alert: PuppetfileExporterDown
+        expr: up{job=~"puppetfile-exporter|prometheus-puppetfile-exporter"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Puppetfile exporter target is down on {{ $labels.instance }}
+          description: |
+            Prometheus has been unable to scrape prometheus-puppetfile-exporter on {{ $labels.instance }} for at least 5 minutes.
+
+      - alert: PuppetfileExporterCollectionFailed
+        expr: puppetfile_exporter_last_collection_success == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile exporter collection failed on {{ $labels.instance }}
+          description: |
+            prometheus-puppetfile-exporter has reported unsuccessful background collections for at least 10 minutes.
+
+      - alert: PuppetfileExporterCollectionStale
+        expr: time() - (puppetfile_exporter_last_successful_collection_timestamp_seconds > 0) > 300
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile exporter collection is stale on {{ $labels.instance }}
+          description: |
+            prometheus-puppetfile-exporter has not refreshed Puppetfile data successfully for more than 5 minutes.
+
+      - alert: PuppetfileSourceDown
+        expr: puppetfile_up == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile source is unreadable or unparsable
+          description: |
+            prometheus-puppetfile-exporter could not read or parse Puppetfile for at least 10 minutes.
+
+      - alert: PuppetfileStale
+        expr: puppetfile_mtime_seconds > 0 and time() - puppetfile_mtime_seconds > 86400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile has not changed for more than 24 hours
+          description: |
+            The Puppetfile backing prometheus-puppetfile-exporter appears stale and has not been updated for more than 24 hours.
+
+      - alert: PuppetfileNoSupportedModules
+        expr: puppetfile_up == 1 and puppetfile_modules_discovered == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile contains no supported pinned modules
+          description: |
+            Puppetfile was parsed successfully, but the exporter did not discover any supported pinned module declarations.
+
+      - alert: PuppetfileUnsupportedModulesPresent
+        expr: puppetfile_up == 1 and puppetfile_unsupported_modules_count > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile contains unsupported module declarations
+          description: |
+            The exporter skipped one or more unsupported Puppetfile module declarations during recent scrapes.
+
+      - alert: PuppetfileIncompleteModulesPresent
+        expr: puppetfile_up == 1 and puppetfile_incomplete_modules_count > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile contains incomplete module declarations
+          description: |
+            The exporter skipped one or more incomplete Puppetfile module declarations, such as unpinned Git modules.
+
+      - alert: PuppetfileNoFilesMonitored
+        expr: puppetfile_files_monitored == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile exporter monitors no files
+          description: |
+            No Puppetfile paths matched after glob expansion. Check that the configured path/glob pattern is correct.
+
+      - alert: PuppetfileBadModule
+        expr: puppetfile_module_status == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile module {{ $labels.module }} is unsupported or incomplete
+          description: |
+            Module {{ $labels.module }} in {{ $labels.path }} has status 0.
+
+      - alert: PuppetfileCollectorReadErrors
+        expr: increase(puppetfile_read_errors_total[30m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile exporter encountered read errors
+          description: |
+            prometheus-puppetfile-exporter observed one or more Puppetfile read/open errors in the last 30 minutes.
+
+      - alert: PuppetfileCollectorParseErrors
+        expr: increase(puppetfile_parse_errors_total[30m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile exporter encountered parse errors
+          description: |
+            prometheus-puppetfile-exporter observed one or more Puppetfile parse errors in the last 30 minutes.
