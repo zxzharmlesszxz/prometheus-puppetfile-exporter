@@ -2,8 +2,8 @@ services:
   exporter:
     command:
       - --web.listen-address=:${COMPOSE_EXPORTER_PORT:-9820}
-      - --${FEATURE_NAME}.refresh-interval=30s
-      - --${FEATURE_NAME}.puppetfile-path=/Puppetfile
+      - --${FEATURE_NAME:-puppetfile}.refresh-interval=30s
+      - --${FEATURE_NAME:-puppetfile}.puppetfile-path=/Puppetfile
       - --log.level=debug
     configs:
       - source: puppetfile
