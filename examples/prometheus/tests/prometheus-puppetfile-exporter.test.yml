@@ -1,0 +1,219 @@
+rule_files:
+  - ../prometheus-puppetfile-exporter.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: Exporter availability and collection alerts honor hold times
+    interval: 1m
+    input_series:
+      - series: 'up{job="puppetfile-exporter",instance="down"}'
+        values: '0x20'
+      - series: 'puppetfile_exporter_last_collection_success{job="prometheus-puppetfile-exporter",instance="failed"}'
+        values: '0x20'
+      - series: 'puppetfile_exporter_last_successful_collection_timestamp_seconds{job="puppetfile-exporter",instance="stale"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: PuppetfileExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: puppetfile-exporter
+              instance: down
+            exp_annotations:
+              summary: Puppetfile exporter target is down on down
+              description: |
+                Prometheus has been unable to scrape prometheus-puppetfile-exporter on down for at least 5 minutes.
+      - eval_time: 11m
+        alertname: PuppetfileExporterCollectionFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: prometheus-puppetfile-exporter
+              instance: failed
+            exp_annotations:
+              summary: Puppetfile exporter collection failed on failed
+              description: |
+                prometheus-puppetfile-exporter has reported unsuccessful background collections for at least 10 minutes.
+      - eval_time: 16m
+        alertname: PuppetfileExporterCollectionStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: stale
+            exp_annotations:
+              summary: Puppetfile exporter collection is stale on stale
+              description: |
+                prometheus-puppetfile-exporter has not refreshed Puppetfile data successfully for more than 5 minutes.
+
+  - name: Puppetfile read and parse health retain the path label
+    interval: 1m
+    input_series:
+      - series: 'puppetfile_up{job="puppetfile-exporter",instance="exporter:9820",path="/missing/Puppetfile"}'
+        values: '0x20'
+      - series: 'puppetfile_up{job="puppetfile-exporter",instance="exporter:9820",path="/invalid/Puppetfile"}'
+        values: '1x20'
+      - series: 'puppetfile_valid{job="puppetfile-exporter",instance="exporter:9820",path="/invalid/Puppetfile"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PuppetfileSourceDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /missing/Puppetfile
+            exp_annotations:
+              summary: Puppetfile source is unreadable
+              description: |
+                prometheus-puppetfile-exporter could not read Puppetfile for at least 10 minutes.
+      - eval_time: 11m
+        alertname: PuppetfileParseInvalid
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /invalid/Puppetfile
+            exp_annotations:
+              summary: Puppetfile source contains invalid declarations
+              description: |
+                prometheus-puppetfile-exporter read Puppetfile but found unsupported or incomplete module declarations for at least 10 minutes.
+
+  - name: Module and counter alerts use domain metrics
+    interval: 1m
+    input_series:
+      - series: 'puppetfile_module_status{job="puppetfile-exporter",instance="exporter:9820",path="/env/Puppetfile",module="bad/module"}'
+        values: '0x40'
+      - series: 'puppetfile_read_errors_total{job="puppetfile-exporter",instance="exporter:9820",path="/env/Puppetfile"}'
+        values: '0x14 1x26'
+      - series: 'puppetfile_parse_errors_total{job="puppetfile-exporter",instance="exporter:9820",path="/env/Puppetfile"}'
+        values: '0x14 1x26'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: PuppetfileBadModule
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /env/Puppetfile
+              module: bad/module
+            exp_annotations:
+              summary: Puppetfile module bad/module is unsupported or incomplete
+              description: |
+                Module bad/module in /env/Puppetfile has status 0.
+      - eval_time: 30m
+        alertname: PuppetfileCollectorReadErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /env/Puppetfile
+            exp_annotations:
+              summary: Puppetfile exporter encountered read errors
+              description: |
+                prometheus-puppetfile-exporter observed one or more Puppetfile read/open errors in the last 30 minutes.
+      - eval_time: 30m
+        alertname: PuppetfileCollectorParseErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /env/Puppetfile
+            exp_annotations:
+              summary: Puppetfile exporter encountered parse errors
+              description: |
+                prometheus-puppetfile-exporter observed one or more Puppetfile parse errors in the last 30 minutes.
+
+  - name: Puppetfile inventory problems retain path labels and hold times
+    interval: 1m
+    input_series:
+      - series: 'puppetfile_up{job="puppetfile-exporter",instance="exporter:9820",path="/empty/Puppetfile"}'
+        values: '1x40'
+      - series: 'puppetfile_modules_discovered{job="puppetfile-exporter",instance="exporter:9820",path="/empty/Puppetfile"}'
+        values: '0x40'
+      - series: 'puppetfile_up{job="puppetfile-exporter",instance="exporter:9820",path="/unsupported/Puppetfile"}'
+        values: '1x40'
+      - series: 'puppetfile_unsupported_modules_count{job="puppetfile-exporter",instance="exporter:9820",path="/unsupported/Puppetfile"}'
+        values: '2x40'
+      - series: 'puppetfile_up{job="prometheus-puppetfile-exporter",instance="exporter:9820",path="/incomplete/Puppetfile"}'
+        values: '1x40'
+      - series: 'puppetfile_incomplete_modules_count{job="prometheus-puppetfile-exporter",instance="exporter:9820",path="/incomplete/Puppetfile"}'
+        values: '3x40'
+      - series: 'puppetfile_files_monitored{job="puppetfile-exporter",instance="no-files"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: PuppetfileNoSupportedModules
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /empty/Puppetfile
+            exp_annotations:
+              summary: Puppetfile contains no supported pinned modules
+              description: |
+                Puppetfile was parsed successfully, but the exporter did not discover any supported pinned module declarations.
+      - eval_time: 31m
+        alertname: PuppetfileUnsupportedModulesPresent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /unsupported/Puppetfile
+            exp_annotations:
+              summary: Puppetfile contains unsupported module declarations
+              description: |
+                The exporter skipped one or more unsupported Puppetfile module declarations during recent scrapes.
+      - eval_time: 31m
+        alertname: PuppetfileIncompleteModulesPresent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: prometheus-puppetfile-exporter
+              instance: exporter:9820
+              path: /incomplete/Puppetfile
+            exp_annotations:
+              summary: Puppetfile contains incomplete module declarations
+              description: |
+                The exporter skipped one or more incomplete Puppetfile module declarations, such as unpinned Git modules.
+      - eval_time: 16m
+        alertname: PuppetfileNoFilesMonitored
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: no-files
+            exp_annotations:
+              summary: Puppetfile exporter monitors no files
+              description: |
+                No Puppetfile paths matched after glob expansion. Check that the configured path/glob pattern is correct.
+
+  - name: Only Puppetfiles older than one day alert after the freshness hold time
+    interval: 1m
+    input_series:
+      - series: 'puppetfile_mtime_seconds{job="puppetfile-exporter",instance="exporter:9820",path="/stale/Puppetfile"}'
+        values: '1x1502'
+      - series: 'puppetfile_mtime_seconds{job="puppetfile-exporter",instance="exporter:9820",path="/fresh/Puppetfile"}'
+        values: '86401x1502'
+    alert_rule_test:
+      - eval_time: 25h1m
+        alertname: PuppetfileStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /stale/Puppetfile
+            exp_annotations:
+              summary: Puppetfile has not changed for more than 24 hours
+              description: |
+                The Puppetfile backing prometheus-puppetfile-exporter appears stale and has not been updated for more than 24 hours.

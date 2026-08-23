@@ -20,8 +20,8 @@ The exporter does not talk to Puppet Forge, Git repositories, Puppet Server, or 
   functions. Scaffold-owned files use the `scaffold_*.go` suffix;
   Puppetfile-specific defaults and hook functions live in adjacent non-scaffold
   feature files.
-  `scaffold_snapshot_types.go` owns the scaffold-managed `Snapshot` alias from
-  the feature package to `internal/puppetfilecheck.Snapshot`.
+  `snapshot_types.go` owns the Puppetfile-specific snapshot wrapper around
+  `internal/puppetfilecheck.Snapshot`.
 - `internal/puppetfilecheck`
   Puppetfile engine: file reading, parser, module declaration types,
   diagnostics, and snapshot-backed checker.
@@ -32,12 +32,14 @@ Common exporter bootstrap, standard flags, logging, version metadata, Prometheus
 
 1. The process starts in `cmd`.
 2. `prometheus-exporter-framework` registers common flags and delegates Puppetfile-specific behavior through extension hooks.
-3. Runtime flags determine the `Puppetfile` path, refresh interval, and HTTP settings.
+3. Runtime flags determine the explicit paths and glob patterns used to find
+   Puppetfiles, the refresh interval, and HTTP settings.
 4. `internal/exporter` creates the Puppetfile feature through
    `puppetfile.NewFeature(...)` and framework-injected feature metadata.
 5. The framework builds a Prometheus registry and builds a feature snapshotter and feature metrics from the extension-backed spec.
-6. The feature snapshotter delegates file reading and parsing to `internal/puppetfilecheck`.
-7. The snapshot collector refreshes `Puppetfile` state in the background.
+6. The feature snapshotter expands comma-separated path/glob inputs and
+   delegates each Puppetfile read and parse to `internal/puppetfilecheck`.
+7. The snapshot collector refreshes the combined Puppetfile state in the background.
 8. Prometheus scrapes expose the latest successful or failed snapshot.
 9. Supported module declarations are exported as `puppetfile_module_info`.
 10. Unsupported or incomplete declarations are skipped and counted in
@@ -102,6 +104,12 @@ Auxiliary official options such as `:default_branch`, `:install_path`, and `:exc
 - `puppetfile_exporter_last_successful_collection_timestamp_seconds`
   Unix timestamp of the latest successful background refresh.
 
+- `puppetfile_exporter_collection_duration_seconds`
+  Framework-owned histogram of background collection duration.
+
+- `puppetfile_exporter_build_info`
+  Framework-owned build and runtime metadata.
+
 ### Diagnostics Metrics
 
 - `puppetfile_unsupported_modules_count`
@@ -123,6 +131,9 @@ For module identifiers without `/`, the exporter derives `owner` and `name` heur
 - If `Puppetfile` cannot be read or parsed, `puppetfile_up = 0` and business metrics are omitted.
 - Unsupported and incomplete declarations do not fail the scrape; they are surfaced through diagnostics metrics.
 - `/healthz` reflects process health, not whether the current `Puppetfile` contents are valid for export.
+
+Prometheus-side scrape health is represented separately by `scrape_*` metrics
+and `up`; these are produced by Prometheus, not by this exporter.
 
 ## Testing Strategy
 

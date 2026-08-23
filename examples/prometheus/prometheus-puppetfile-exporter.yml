@@ -1,8 +1,10 @@
 groups:
   - name: puppetfile-exporter
+    # Matches puppetfile-exporter and prometheus-puppetfile-exporter, including
+    # underscore and hyphen separator variants from the deployment contract.
     rules:
       - alert: PuppetfileExporterDown
-        expr: up{job=~"puppetfile-exporter|prometheus-puppetfile-exporter"} == 0
+        expr: up{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
         for: 5m
         labels:
           severity: critical
@@ -12,7 +14,7 @@ groups:
             Prometheus has been unable to scrape prometheus-puppetfile-exporter on {{ $labels.instance }} for at least 5 minutes.
 
       - alert: PuppetfileExporterCollectionFailed
-        expr: puppetfile_exporter_last_collection_success == 0
+        expr: puppetfile_exporter_last_collection_success{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
         for: 10m
         labels:
           severity: warning
@@ -22,7 +24,7 @@ groups:
             prometheus-puppetfile-exporter has reported unsuccessful background collections for at least 10 minutes.
 
       - alert: PuppetfileExporterCollectionStale
-        expr: time() - (puppetfile_exporter_last_successful_collection_timestamp_seconds > 0) > 300
+        expr: time() - (puppetfile_exporter_last_successful_collection_timestamp_seconds{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 0) > 300
         for: 10m
         labels:
           severity: warning
@@ -32,17 +34,27 @@ groups:
             prometheus-puppetfile-exporter has not refreshed Puppetfile data successfully for more than 5 minutes.
 
       - alert: PuppetfileSourceDown
-        expr: puppetfile_up == 0
+        expr: puppetfile_up{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: Puppetfile source is unreadable or unparsable
+          summary: Puppetfile source is unreadable
           description: |
-            prometheus-puppetfile-exporter could not read or parse Puppetfile for at least 10 minutes.
+            prometheus-puppetfile-exporter could not read Puppetfile for at least 10 minutes.
+
+      - alert: PuppetfileParseInvalid
+        expr: puppetfile_up{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 1 and puppetfile_valid{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile source contains invalid declarations
+          description: |
+            prometheus-puppetfile-exporter read Puppetfile but found unsupported or incomplete module declarations for at least 10 minutes.
 
       - alert: PuppetfileStale
-        expr: puppetfile_mtime_seconds > 0 and time() - puppetfile_mtime_seconds > 86400
+        expr: puppetfile_mtime_seconds{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 0 and time() - puppetfile_mtime_seconds{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 86400
         for: 1h
         labels:
           severity: warning
@@ -52,7 +64,7 @@ groups:
             The Puppetfile backing prometheus-puppetfile-exporter appears stale and has not been updated for more than 24 hours.
 
       - alert: PuppetfileNoSupportedModules
-        expr: puppetfile_up == 1 and puppetfile_modules_discovered == 0
+        expr: puppetfile_up{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 1 and puppetfile_modules_discovered{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
         for: 15m
         labels:
           severity: warning
@@ -62,7 +74,7 @@ groups:
             Puppetfile was parsed successfully, but the exporter did not discover any supported pinned module declarations.
 
       - alert: PuppetfileUnsupportedModulesPresent
-        expr: puppetfile_up == 1 and puppetfile_unsupported_modules_count > 0
+        expr: puppetfile_up{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 1 and puppetfile_unsupported_modules_count{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 0
         for: 30m
         labels:
           severity: warning
@@ -72,7 +84,7 @@ groups:
             The exporter skipped one or more unsupported Puppetfile module declarations during recent scrapes.
 
       - alert: PuppetfileIncompleteModulesPresent
-        expr: puppetfile_up == 1 and puppetfile_incomplete_modules_count > 0
+        expr: puppetfile_up{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 1 and puppetfile_incomplete_modules_count{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 0
         for: 30m
         labels:
           severity: warning
@@ -82,7 +94,7 @@ groups:
             The exporter skipped one or more incomplete Puppetfile module declarations, such as unpinned Git modules.
 
       - alert: PuppetfileNoFilesMonitored
-        expr: puppetfile_files_monitored == 0
+        expr: puppetfile_files_monitored{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
         for: 15m
         labels:
           severity: warning
@@ -92,7 +104,7 @@ groups:
             No Puppetfile paths matched after glob expansion. Check that the configured path/glob pattern is correct.
 
       - alert: PuppetfileBadModule
-        expr: puppetfile_module_status == 0
+        expr: puppetfile_module_status{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 0
         for: 15m
         labels:
           severity: warning
@@ -102,7 +114,7 @@ groups:
             Module {{ $labels.module }} in {{ $labels.path }} has status 0.
 
       - alert: PuppetfileCollectorReadErrors
-        expr: increase(puppetfile_read_errors_total[30m]) > 0
+        expr: increase(puppetfile_read_errors_total{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"}[30m]) > 0
         for: 0m
         labels:
           severity: warning
@@ -112,7 +124,7 @@ groups:
             prometheus-puppetfile-exporter observed one or more Puppetfile read/open errors in the last 30 minutes.
 
       - alert: PuppetfileCollectorParseErrors
-        expr: increase(puppetfile_parse_errors_total[30m]) > 0
+        expr: increase(puppetfile_parse_errors_total{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"}[30m]) > 0
         for: 0m
         labels:
           severity: warning

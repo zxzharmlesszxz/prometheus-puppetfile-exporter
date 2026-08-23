@@ -1,6 +1,48 @@
 # Metrics
 
-## Health Metrics
+Metric ownership follows three namespaces:
+
+- `puppetfile_exporter_*`: framework-owned exporter runtime and collection metrics
+- `puppetfile_*`: Puppetfile source, module, and diagnostics metrics
+- `scrape_*` (plus `up`): Prometheus-side target health metrics; these are not
+  emitted by the exporter
+
+## Exporter Runtime Metrics
+
+### `puppetfile_exporter_build_info`
+
+- Type: gauge
+- Value: always `1`
+- Labels: build and runtime metadata, including version, revision, branch, Go
+  version, GOOS, and GOARCH
+
+### `puppetfile_exporter_collection_duration_seconds`
+
+- Type: histogram
+- Value: duration of framework background collection refreshes
+- Series: `_bucket`, `_sum`, and `_count`
+
+### `puppetfile_exporter_last_collection_success`
+
+- Type: gauge
+- Value:
+  - `1` if the latest background refresh completed successfully
+  - `0` if the latest background refresh failed
+- Labels: none
+
+### `puppetfile_exporter_last_collection_timestamp_seconds`
+
+- Type: gauge
+- Value: Unix timestamp of the last background refresh attempt
+- Labels: none
+
+### `puppetfile_exporter_last_successful_collection_timestamp_seconds`
+
+- Type: gauge
+- Value: Unix timestamp of the last successful background refresh
+- Labels: none
+
+## Puppetfile Source Health
 
 ### `puppetfile_up`
 
@@ -34,27 +76,7 @@
 - Labels: `path`
 - Notes: `0` is valid for an empty `Puppetfile` or one without supported modules
 
-### `puppetfile_exporter_last_collection_success`
-
-- Type: gauge
-- Value:
-  - `1` if the latest background refresh completed successfully
-  - `0` if the latest background refresh failed
-- Labels: none
-
-### `puppetfile_exporter_last_collection_timestamp_seconds`
-
-- Type: gauge
-- Value: Unix timestamp of the last background refresh attempt
-- Labels: none
-
-### `puppetfile_exporter_last_successful_collection_timestamp_seconds`
-
-- Type: gauge
-- Value: Unix timestamp of the last successful background refresh
-- Labels: none
-
-## Business Metrics
+## Puppetfile Module Metrics
 
 ### `puppetfile_module_info`
 
@@ -73,7 +95,7 @@
 ### `puppetfile_files_monitored`
 
 - Type: gauge
-- Value: number of Puppetfile paths configured and monitored (after glob expansion)
+- Value: number of unique Puppetfile paths configured and monitored after glob expansion
 - Labels: none
 - Notes: `0` means no paths were configured; useful for alerting on misconfigured glob patterns
 
@@ -139,3 +161,19 @@ Supported module kinds:
 - Value: duration of the most recent Puppetfile refresh
 - Labels: `path`
 - Notes: preserved metric name from the pre-refresh collector implementation
+
+Read and parse counters should be graphed with `rate()` or `increase()` over a
+range, rather than as raw cumulative values.
+
+## Prometheus-Side Scrape Metrics
+
+Prometheus generates these metrics for the selected exporter target:
+
+- `up`: whether the last scrape succeeded
+- `scrape_duration_seconds`: duration of the last scrape
+- `scrape_samples_scraped`: samples exposed before metric relabeling
+- `scrape_samples_post_metric_relabeling`: samples retained after relabeling
+- `scrape_series_added`: new series discovered by the scrape
+
+They use the `scrape_*` namespace and must not be confused with the domain-owned
+`puppetfile_scrape_duration_seconds` refresh gauge.

@@ -3276,7 +3276,7 @@
         "spec": {
           "id": 26,
           "title": "Source Up / Valid",
-          "description": "Optional feature source health gauges emitted by file or source collectors.",
+          "description": "Puppetfile readability and declaration-validity gauges.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3294,8 +3294,8 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "{job=~\"$job\", __name__=~\"puppetfile.*_(up|valid)\"}",
-                        "legendFormat": "{{__name__}} {{path}} {{source}} {{instance}}",
+                        "expr": "label_replace(puppetfile_up{job=~\"$job\"}, \"health_metric\", \"up\", \"job\", \".*\") or label_replace(puppetfile_valid{job=~\"$job\"}, \"health_metric\", \"valid\", \"job\", \".*\")",
+                        "legendFormat": "{{health_metric}} {{path}} {{instance}}",
                         "range": true,
                         "instant": false
                       }
@@ -3394,7 +3394,7 @@
         "spec": {
           "id": 27,
           "title": "Source MTime Age",
-          "description": "Age of optional source modification timestamps.",
+          "description": "Age of each monitored Puppetfile modification timestamp.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3412,8 +3412,8 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "time() - {job=~\"$job\", __name__=~\"puppetfile.*_mtime_seconds\"}",
-                        "legendFormat": "{{__name__}} {{path}} {{source}} {{instance}}",
+                        "expr": "time() - puppetfile_mtime_seconds{job=~\"$job\"}",
+                        "legendFormat": "{{path}} {{instance}}",
                         "range": true,
                         "instant": false
                       }
@@ -3512,7 +3512,7 @@
         "spec": {
           "id": 28,
           "title": "Source Refresh Duration",
-          "description": "Optional source-level refresh duration emitted by file or source collectors.",
+          "description": "Duration of the most recent refresh for each monitored Puppetfile.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3530,8 +3530,8 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "{job=~\"$job\", __name__=~\"puppetfile.*_scrape_duration_seconds\"}",
-                        "legendFormat": "{{__name__}} {{path}} {{source}} {{instance}}",
+                        "expr": "puppetfile_scrape_duration_seconds{job=~\"$job\"}",
+                        "legendFormat": "{{path}} {{instance}}",
                         "range": true,
                         "instant": false
                       }
@@ -3630,7 +3630,7 @@
         "spec": {
           "id": 29,
           "title": "Source Error Rate",
-          "description": "Optional source read and parse error rates over five minutes.",
+          "description": "Puppetfile read and parse error rates over five minutes.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3648,8 +3648,8 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "label_replace(rate({job=~\"$job\", __name__=~\"puppetfile.*_read_errors_total\"}[5m]), \"error_type\", \"read\", \"job\", \".*\") or label_replace(rate({job=~\"$job\", __name__=~\"puppetfile.*_parse_errors_total\"}[5m]), \"error_type\", \"parse\", \"job\", \".*\")",
-                        "legendFormat": "{{error_type}} {{path}} {{source}} {{instance}}",
+                        "expr": "label_replace(rate(puppetfile_read_errors_total{job=~\"$job\"}[5m]), \"error_type\", \"read\", \"job\", \".*\") or label_replace(rate(puppetfile_parse_errors_total{job=~\"$job\"}[5m]), \"error_type\", \"parse\", \"job\", \".*\")",
+                        "legendFormat": "{{error_type}} {{path}} {{instance}}",
                         "range": true,
                         "instant": false
                       }
@@ -5381,10 +5381,10 @@
                                   "x": 0,
                                   "y": 4,
                                   "width": 24,
-                                  "height": 7,
+                                  "height": 10,
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-34"
+                                    "name": "panel-35"
                                   }
                                 }
                               },
@@ -5392,12 +5392,12 @@
                                 "kind": "GridLayoutItem",
                                 "spec": {
                                   "x": 0,
-                                  "y": 11,
+                                  "y": 14,
                                   "width": 24,
-                                  "height": 10,
+                                  "height": 7,
                                   "element": {
                                     "kind": "ElementReference",
-                                    "name": "panel-35"
+                                    "name": "panel-34"
                                   }
                                 }
                               },
@@ -5877,12 +5877,12 @@
             "group": "prometheus",
             "kind": "DataQuery",
             "spec": {
-              "query": "label_values(up, job)",
+              "query": "label_values(up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"}, job)",
               "refId": "StandardVariableQuery"
             },
             "version": "v0"
           },
-          "definition": "label_values(up, job)",
+          "definition": "label_values(up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"}, job)",
           "refresh": "onDashboardLoad",
           "regex": "",
           "current": {
@@ -5892,7 +5892,7 @@
           "options": [],
           "multi": true,
           "includeAll": true,
-          "allValue": ".*puppetfile.*",
+          "allValue": "^(prometheus[_-])?puppetfile[_-]exporter$",
           "sort": "alphabeticalAsc",
           "hide": "dontHide",
           "skipUrlSync": false,

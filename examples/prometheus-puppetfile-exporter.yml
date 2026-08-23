@@ -5,10 +5,10 @@
 # - single Puppetfile:
 #   puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile
 # - multiple explicit files:
-#   puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile,/etc/puppetlabs/code/environments/development/Puppetfile
+#   puppetfile_path: /envs/production/Puppetfile,/envs/testing/Puppetfile
 # - all environment Puppetfiles with a glob:
 #   puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile
-# - comma-separated glob plus explicit file:
-#   puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile,/opt/puppetlabs/extra/Puppetfile
+# - glob plus explicit file:
+#   puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile,/opt/extra/Puppetfile
 #
 puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile

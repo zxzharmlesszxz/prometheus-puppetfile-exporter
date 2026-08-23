@@ -8,7 +8,8 @@ Unsupported or incomplete module declarations are skipped and reported through d
 
 ## Inputs
 
-The exporter reads one local `Puppetfile`.
+The exporter reads one or more local `Puppetfile` files. The configured value
+can contain explicit paths, glob patterns, or a comma-separated mix of both.
 
 ## Metrics
 
@@ -22,6 +23,7 @@ puppetfile_module_info{module="puppetlabs/apt",owner="puppetlabs",name="apt",cur
 
 Important metric groups:
 
+- `puppetfile_exporter_*` for framework/exporter runtime and collection health
 - `puppetfile_up`
 - `puppetfile_valid`
 - `puppetfile_mtime_seconds`
@@ -32,6 +34,10 @@ Important metric groups:
 - `puppetfile_read_errors_total`
 - `puppetfile_parse_errors_total`
 - `puppetfile_scrape_duration_seconds`
+- `scrape_*` and `up` for Prometheus-side scrape health
+
+The exporter emits `puppetfile_exporter_*` and `puppetfile_*`. Prometheus adds
+the target-level `scrape_*` and `up` series when it scrapes the exporter.
 
 ## Input Semantics
 
@@ -90,14 +96,14 @@ Run against the bundled sample file:
 ```bash
 make build
 ./dist/prometheus-puppetfile-exporter \
-  --puppetfile.puppetfile-path=./testdata/Puppetfile
+  --puppetfile.puppetfile-path=./smoke/testdata/Puppetfile
 ```
 
 `pprof` is disabled by default. Enable it explicitly only when you need runtime profiling:
 
 ```bash
 ./dist/prometheus-puppetfile-exporter \
-  --puppetfile.puppetfile-path=./testdata/Puppetfile \
+  --puppetfile.puppetfile-path=./smoke/testdata/Puppetfile \
   --web.enable-pprof
 ```
 
@@ -144,6 +150,9 @@ puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile
 It can point at one file, several explicit files, a glob, or a comma-separated
 mix of globs and explicit files:
 
+After glob expansion, duplicate paths are removed while preserving the order
+of their first appearance.
+
 ```yaml
 # single Puppetfile
 puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile
@@ -151,7 +160,7 @@ puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile
 
 ```yaml
 # multiple explicit files
-puppetfile_path: /etc/puppetlabs/code/environments/production/Puppetfile,/etc/puppetlabs/code/environments/development/Puppetfile
+puppetfile_path: /envs/production/Puppetfile,/envs/testing/Puppetfile
 ```
 
 ```yaml
@@ -160,8 +169,8 @@ puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile
 ```
 
 ```yaml
-# comma-separated glob plus explicit file
-puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile,/opt/puppetlabs/extra/Puppetfile
+# glob plus explicit file
+puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile,/opt/extra/Puppetfile
 ```
 
 ## Custom Puppetfile
@@ -236,16 +245,20 @@ The high-level design is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 ## Alert Rules
 
 Example Prometheus alert rules live in [`examples/prometheus/prometheus-puppetfile-exporter.yml`](examples/prometheus/prometheus-puppetfile-exporter.yml).
-They cover exporter scrape availability, framework collection failure/staleness,
-Puppetfile source health, module inventory problems, file discovery, bad module
-status, and read/parse error counter increases.
+They use `job=~"^(prometheus[_-])?puppetfile[_-]exporter$"` and cover exporter
+scrape availability, framework collection failure/staleness, unreadable and
+parse-invalid Puppetfiles, module source/domain problems, and read/parse error
+counter increases.
 
 ## Grafana Dashboard
 
 Adapted Grafana dashboard JSON for this exporter lives in [`examples/grafana/prometheus-puppetfile-exporter.json`](examples/grafana/prometheus-puppetfile-exporter.json).
+It uses Grafana dashboard schema v2: domain status stats and the Puppetfile
+module table lead the Overview tab, Source Health stays on that tab, exporter
+collection graphs use two columns, and the collapsed historical row uses three.
 
 ## CI
 
-GitHub Actions CI lives in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It runs the Go checks in `golang:1.26.3-alpine`, validates examples, smoke-tests the Docker image, publishes release archives on tags, and pushes tagged images to GHCR.
+GitHub Actions CI lives in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It runs the Go checks in `golang:1.27.0-alpine`, validates examples, smoke-tests the Docker image, publishes release archives on tags, and pushes tagged images to GHCR.
 
 The legacy GitLab definition remains in [`.gitlab-ci.yml`](.gitlab-ci.yml).
