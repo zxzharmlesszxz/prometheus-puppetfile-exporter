@@ -90,10 +90,11 @@ func NewFeatureTestSpec() FeatureTestSpec {
 
 func RegisterFeatureTests(suite *FeatureTestSuite) {
 	suite.Register("collector_exports_puppetfile_metrics", func(t *testing.T) { testCollectorExportsPuppetfileMetrics(t, suite) })
+	suite.Register("collector_exports_error_counters_by_path", func(t *testing.T) { testCollectorExportsErrorCountersByPath(t, suite) })
 	suite.Register("collector_reads_puppetfile_fixture", func(t *testing.T) { testCollectorReadsPuppetfileFixture(t, suite) })
 	suite.Register("collector_reports_failed_snapshot", func(t *testing.T) { testCollectorReportsFailedSnapshot(t, suite) })
 	suite.Register("collector_logs_snapshot_diagnostics", func(t *testing.T) { testCollectorLogsSnapshotDiagnostics(t, suite) })
-	suite.Register("snapshot_engine_tracks_read_errors", func(t *testing.T) { testSnapshotEngineTracksReadErrors(t, suite) })
+	suite.Register("snapshot_engine_tracks_read_errors", testSnapshotEngineTracksReadErrors)
 	suite.Register("exporter_registers_collector_with_fixture", func(t *testing.T) { testExporterRegistersCollectorWithFixture(t, suite) })
 	suite.Register("exporter_runtime_config_normalizes_values", func(t *testing.T) { testExporterRuntimeConfigNormalizesValues(t, suite) })
 	suite.Register("smoke_spec_includes_fixture_args", func(t *testing.T) { testSmokeSpecIncludesFixtureArgs(t, suite) })
@@ -126,6 +127,7 @@ func testCollectorExportsPuppetfileMetrics(t *testing.T, suite *FeatureTestSuite
 					Success:               true,
 					Valid:                 false,
 					MTimeSeconds:          1000,
+					ReadErrorsTotal:       2,
 					ParseErrorsTotal:      1,
 					ScrapeDurationSeconds: 0.25,
 					Modules: puppetfilecheck.Modules{
@@ -163,21 +165,45 @@ func testCollectorExportsPuppetfileMetrics(t *testing.T, suite *FeatureTestSuite
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricIncompleteModules), nil, 1)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricFilesMonitored), nil, 1)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricDeclaredModulesTotal), nil, 3)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "puppetlabs/apt"}, 1)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "example/local"}, 0)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "broken-module"}, 0)
+	assertModuleStatuses(t, families, suite)
 	exportertest.AssertMetricValue(t, families, testLastSuccess, nil, 1)
 	exportertest.AssertMetricValue(t, families, testLastTimestamp, nil, float64(now.Unix()))
 	exportertest.AssertMetricValue(t, families, testLastSuccessfulTS, nil, float64(now.Unix()))
 
 	metric := singleMetric(t, families, suite.MetricName(testFeatureName, "", metricModuleInfo))
-	labels := metricLabels(metric)
+	labels := metricLabels(t, metric)
 	if labels["module"] != "puppetlabs/apt" || labels["owner"] != "puppetlabs" || labels["name"] != "apt" {
 		t.Fatalf("unexpected module labels: %#v", labels)
 	}
 	if labels["current_version"] != "11.2.0" || labels["type"] != "forge" {
 		t.Fatalf("unexpected version labels: %#v", labels)
 	}
+}
+
+func testCollectorExportsErrorCountersByPath(t *testing.T, suite *FeatureTestSuite) {
+	collector := suite.NewCollector(
+		testFeatureName,
+		testMetricNamespace,
+		suite.NewFakeSnapshotter(Snapshot{
+			puppetfile: puppetfilecheck.Snapshot{
+				AttemptTime: time.Unix(1700000000, 0),
+				Success:     false,
+				Files: []puppetfilecheck.FileSnapshot{
+					{Path: "/envs/production/Puppetfile", Success: true, Valid: false, ParseErrorsTotal: 3},
+					{Path: "/envs/testing/Puppetfile", Success: false, ReadErrorsTotal: 2},
+				},
+			},
+		}),
+		testRefreshInterval,
+	)
+
+	families := exportertest.RegisterAndGather(t, collector)
+	readErrors := suite.MetricName(testFeatureName, "", metricReadErrors)
+	parseErrors := suite.MetricName(testFeatureName, "", metricParseErrors)
+	exportertest.AssertMetricValue(t, families, readErrors, map[string]string{"path": "/envs/production/Puppetfile"}, 0)
+	exportertest.AssertMetricValue(t, families, readErrors, map[string]string{"path": "/envs/testing/Puppetfile"}, 2)
+	exportertest.AssertMetricValue(t, families, parseErrors, map[string]string{"path": "/envs/production/Puppetfile"}, 3)
+	exportertest.AssertMetricValue(t, families, parseErrors, map[string]string{"path": "/envs/testing/Puppetfile"}, 0)
 }
 
 func testCollectorReadsPuppetfileFixture(t *testing.T, suite *FeatureTestSuite) {
@@ -199,10 +225,7 @@ func testCollectorReadsPuppetfileFixture(t *testing.T, suite *FeatureTestSuite) 
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricUnsupportedModules), nil, 1)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricIncompleteModules), nil, 3)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricDeclaredModulesTotal), nil, 11)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "puppetlabs/apt"}, 1)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "example/local"}, 0)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "broken-module"}, 0)
-	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricModuleStatus), map[string]string{"module": "puppetlabs/apache"}, 0)
+	assertModuleStatuses(t, families, suite, "puppetlabs/apache")
 }
 
 func testCollectorReportsFailedSnapshot(t *testing.T, suite *FeatureTestSuite) {
@@ -224,6 +247,7 @@ func testCollectorReportsFailedSnapshot(t *testing.T, suite *FeatureTestSuite) {
 						Path:                  testPuppetfilePath(),
 						Success:               false,
 						Err:                   errors.New("read failed"),
+						ReadErrorsTotal:       1,
 						ScrapeDurationSeconds: 0.01,
 					},
 				},
@@ -286,7 +310,7 @@ func testCollectorLogsSnapshotDiagnostics(t *testing.T, suite *FeatureTestSuite)
 	}
 }
 
-func testSnapshotEngineTracksReadErrors(t *testing.T, suite *FeatureTestSuite) {
+func testSnapshotEngineTracksReadErrors(t *testing.T) {
 	engine := puppetfilecheck.NewChecker(filepath.Join(t.TempDir(), "missing-Puppetfile"))
 	first := engine.Snapshot(t.Context(), time.Unix(1700000000, 0))
 	second := engine.Snapshot(t.Context(), time.Unix(1700000001, 0))
@@ -352,13 +376,42 @@ func singleMetric(t *testing.T, families []*dto.MetricFamily, name string) *dto.
 	t.Helper()
 
 	family := exportertest.MetricFamily(t, families, name)
+	if family == nil {
+		t.Fatalf("metric family %q is nil", name)
+	}
 	if len(family.Metric) != 1 {
 		t.Fatalf("%s metric count = %d, want 1", name, len(family.Metric))
 	}
-	return family.Metric[0]
+	metric := family.Metric[0]
+	if metric == nil {
+		t.Fatalf("metric family %q contains a nil metric", name)
+	}
+	return metric
 }
 
-func metricLabels(metric *dto.Metric) map[string]string {
+func assertModuleStatuses(t *testing.T, families []*dto.MetricFamily, suite *FeatureTestSuite, additionalInvalid ...string) {
+	t.Helper()
+
+	name := suite.MetricName(testFeatureName, "", metricModuleStatus)
+	want := map[string]float64{
+		"puppetlabs/apt": 1,
+		"example/local":  0,
+		"broken-module":  0,
+	}
+	for _, module := range additionalInvalid {
+		want[module] = 0
+	}
+	for module, value := range want {
+		exportertest.AssertMetricValue(t, families, name, map[string]string{"module": module}, value)
+	}
+}
+
+func metricLabels(t *testing.T, metric *dto.Metric) map[string]string {
+	t.Helper()
+	if metric == nil {
+		t.Fatal("cannot read labels from a nil metric")
+	}
+
 	labels := make(map[string]string, len(metric.Label))
 	for _, label := range metric.Label {
 		labels[label.GetName()] = label.GetValue()

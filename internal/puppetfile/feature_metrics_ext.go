@@ -37,13 +37,13 @@ func NewFeatureMetricHandlers() featurekit.FeatureMetricHandlers[Snapshot] {
 }
 
 func (state *featureMetricState) CollectFeatureMetrics(ctx featurekit.FeatureMetricsContext[Snapshot], ch chan<- prometheus.Metric, snapshot Snapshot, _ time.Time) {
-	ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricReadErrors), prometheus.CounterValue, float64(snapshot.puppetfile.ReadErrorsTotal), snapshot.puppetfile.Path)
 	ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricFilesMonitored), prometheus.GaugeValue, float64(len(snapshot.puppetfile.Files)))
 
 	for _, file := range snapshot.puppetfile.Files {
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricUp), prometheus.GaugeValue, framework.BoolFloat(file.Success), file.Path)
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricValid), prometheus.GaugeValue, framework.BoolFloat(file.Valid), file.Path)
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricMTime), prometheus.GaugeValue, file.MTimeSeconds, file.Path)
+		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricReadErrors), prometheus.CounterValue, float64(file.ReadErrorsTotal), file.Path)
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricParseErrors), prometheus.CounterValue, float64(file.ParseErrorsTotal), file.Path)
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricScrapeDuration), prometheus.GaugeValue, file.ScrapeDurationSeconds, file.Path)
 

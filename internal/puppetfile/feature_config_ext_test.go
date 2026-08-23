@@ -44,6 +44,11 @@ func TestExpandPaths(t *testing.T) {
 			want: []string{"/a/Puppetfile", "/b/Puppetfile"},
 		},
 		{
+			name: "duplicate explicit paths removed",
+			raw:  "/a/Puppetfile,/b/Puppetfile,/a/Puppetfile",
+			want: []string{"/a/Puppetfile", "/b/Puppetfile"},
+		},
+		{
 			name: "spaces around comma",
 			raw:  " /a/Puppetfile , /b/Puppetfile ",
 			want: []string{"/a/Puppetfile", "/b/Puppetfile"},
@@ -157,6 +162,34 @@ func TestExpandPathsGlobMixedLiteralAndGlob(t *testing.T) {
 	}
 	if got[1] != matchFile {
 		t.Fatalf("expandPaths(...)[1] = %q, want %q", got[1], matchFile)
+	}
+}
+
+func TestExpandPathsDeduplicatesGlobAndExplicitOverlap(t *testing.T) {
+	tmpDir := t.TempDir()
+	var expected []string
+	for _, env := range []string{"production", "testing"} {
+		path := filepath.Join(tmpDir, "environments", env, "Puppetfile")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("# "+env+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		expected = append(expected, path)
+	}
+
+	pattern := filepath.Join(tmpDir, "environments", "*", "Puppetfile")
+	raw := pattern + "," + expected[0] + "," + pattern
+	got := expandPaths(raw)
+
+	if len(got) != len(expected) {
+		t.Fatalf("expandPaths(%q) = %v, want %v", raw, got, expected)
+	}
+	for i := range expected {
+		if got[i] != expected[i] {
+			t.Fatalf("expandPaths(%q)[%d] = %q, want %q", raw, i, got[i], expected[i])
+		}
 	}
 }
 

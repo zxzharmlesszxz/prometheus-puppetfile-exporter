@@ -34,6 +34,7 @@ type FileSnapshot struct {
 	Valid                 bool
 	Err                   error
 	MTimeSeconds          float64
+	ReadErrorsTotal       uint64
 	ParseErrorsTotal      uint64
 	ScrapeDurationSeconds float64
 	Modules               Modules

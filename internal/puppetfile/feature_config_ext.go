@@ -18,7 +18,16 @@ func hasGlobMeta(s string) bool {
 
 func expandPaths(raw string) []string {
 	var paths []string
-	for _, p := range strings.Split(raw, ",") {
+	seen := make(map[string]struct{})
+	appendPath := func(path string) {
+		if _, exists := seen[path]; exists {
+			return
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+
+	for p := range strings.SplitSeq(raw, ",") {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
@@ -27,17 +36,19 @@ func expandPaths(raw string) []string {
 			matches, err := filepath.Glob(p)
 			if err != nil {
 				// malformed glob — treat as literal path
-				paths = append(paths, p)
+				appendPath(p)
 				continue
 			}
 			if len(matches) > 0 {
-				paths = append(paths, matches...)
+				for _, match := range matches {
+					appendPath(match)
+				}
 			} else {
 				// no files match — keep pattern so read fails with clear error
-				paths = append(paths, p)
+				appendPath(p)
 			}
 		} else {
-			paths = append(paths, p)
+			appendPath(p)
 		}
 	}
 	if len(paths) == 0 {

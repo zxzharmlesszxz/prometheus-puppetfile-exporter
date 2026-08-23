@@ -2,6 +2,7 @@ package puppetfilecheck
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -11,12 +12,16 @@ import (
 )
 
 type Checker struct {
-	Paths            []string
-	readErrorsTotal  *atomic.Uint64
-	parseErrorsTotal *atomic.Uint64
+	paths    []string
+	counters map[string]*fileCounters
 }
 
-func NewChecker(paths ...string) Checker {
+type fileCounters struct {
+	readErrorsTotal  atomic.Uint64
+	parseErrorsTotal atomic.Uint64
+}
+
+func NewChecker(paths ...string) *Checker {
 	if len(paths) == 0 {
 		paths = []string{DefaultPuppetfilePath}
 	}
@@ -30,39 +35,37 @@ func NewChecker(paths ...string) Checker {
 	if len(cleaned) == 0 {
 		cleaned = []string{DefaultPuppetfilePath}
 	}
-	return Checker{
-		Paths:            cleaned,
-		readErrorsTotal:  &atomic.Uint64{},
-		parseErrorsTotal: &atomic.Uint64{},
+	counters := make(map[string]*fileCounters, len(cleaned))
+	for _, path := range cleaned {
+		counters[path] = &fileCounters{}
+	}
+	return &Checker{
+		paths:    cleaned,
+		counters: counters,
 	}
 }
 
-func (c Checker) Path() string {
-	if len(c.Paths) == 0 {
-		return ""
-	}
-	return c.Paths[0]
-}
-
-func (c Checker) Snapshot(ctx context.Context, now time.Time) Snapshot {
+func (c *Checker) Snapshot(ctx context.Context, now time.Time) Snapshot {
 	var files []FileSnapshot
 	var allModules = make(Modules)
 	var allUnsupported []string
 	var allIncomplete []string
 	var allSuccess = true
 	var scrapeDuration float64
+	var readErrorsTotal uint64
+	var parseErrorsTotal uint64
 
-	for _, path := range c.Paths {
-		fs := c.scrapeFile(ctx, now, path)
+	for _, path := range c.paths {
+		fs := c.scrapeFile(ctx, path)
 		files = append(files, fs)
 		if !fs.Success {
 			allSuccess = false
 		}
-		for k, v := range fs.Modules {
-			allModules[k] = v
-		}
+		maps.Copy(allModules, fs.Modules)
 		allUnsupported = append(allUnsupported, fs.UnsupportedModules...)
 		allIncomplete = append(allIncomplete, fs.IncompleteModules...)
+		readErrorsTotal += fs.ReadErrorsTotal
+		parseErrorsTotal += fs.ParseErrorsTotal
 	}
 
 	sort.Strings(allUnsupported)
@@ -95,8 +98,8 @@ func (c Checker) Snapshot(ctx context.Context, now time.Time) Snapshot {
 		Err:                   overallErr,
 		Path:                  firstPath,
 		MTimeSeconds:          firstMTime,
-		ReadErrorsTotal:       c.readErrorsTotal.Load(),
-		ParseErrorsTotal:      c.parseErrorsTotal.Load(),
+		ReadErrorsTotal:       readErrorsTotal,
+		ParseErrorsTotal:      parseErrorsTotal,
 		ScrapeDurationSeconds: scrapeDuration,
 		Modules:               allModules,
 		UnsupportedModules:    allUnsupported,
@@ -105,10 +108,11 @@ func (c Checker) Snapshot(ctx context.Context, now time.Time) Snapshot {
 	}
 }
 
-func (c Checker) scrapeFile(ctx context.Context, now time.Time, path string) FileSnapshot {
+func (c *Checker) scrapeFile(ctx context.Context, path string) FileSnapshot {
 	var result ParseResult
+	counters := c.counters[path]
 	scrape := framework.FileScraper{
-		ReadErrorsTotal: c.readErrorsTotal,
+		ReadErrorsTotal: &counters.readErrorsTotal,
 		ReadFile: func(p string) ([]byte, error) {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -125,7 +129,8 @@ func (c Checker) scrapeFile(ctx context.Context, now time.Time, path string) Fil
 		Success:               scrape.Up,
 		Err:                   scrape.Err,
 		MTimeSeconds:          scrape.MTimeSeconds,
-		ParseErrorsTotal:      c.parseErrorsTotal.Load(),
+		ReadErrorsTotal:       counters.readErrorsTotal.Load(),
+		ParseErrorsTotal:      counters.parseErrorsTotal.Load(),
 		ScrapeDurationSeconds: scrape.ScrapeDurationSeconds,
 	}
 
@@ -135,8 +140,8 @@ func (c Checker) scrapeFile(ctx context.Context, now time.Time, path string) Fil
 		fs.IncompleteModules = result.IncompleteModules
 		fs.Valid = len(result.UnsupportedModules) == 0 && len(result.IncompleteModules) == 0
 		if !fs.Valid {
-			c.parseErrorsTotal.Add(1)
-			fs.ParseErrorsTotal = c.parseErrorsTotal.Load()
+			counters.parseErrorsTotal.Add(1)
+			fs.ParseErrorsTotal = counters.parseErrorsTotal.Load()
 		}
 	}
 

@@ -1,11 +1,9 @@
 package puppetfilecheck
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestParseFile(t *testing.T) {
@@ -66,6 +64,38 @@ func TestParseFileSupportsDoubleQuotedDeclarations(t *testing.T) {
 	}
 }
 
+func TestParseContentSupportsEscapedQuotesAndCommentCharacters(t *testing.T) {
+	t.Parallel()
+
+	result := ParseContent(
+		"mod 'example/single', '1\\'2#stable' # trailing comment\n" +
+			"mod \"example/double\", \"feature\\\"#1\" # trailing comment\n",
+	)
+
+	if got := result.Modules["example/single"]; got.Version != "1'2#stable" || got.Type != ModuleTypeForge {
+		t.Fatalf("unexpected escaped single-quoted module: %#v", got)
+	}
+	if got := result.Modules["example/double"]; got.Version != `feature"#1` || got.Type != ModuleTypeForge {
+		t.Fatalf("unexpected escaped double-quoted module: %#v", got)
+	}
+	if len(result.UnsupportedModules) != 0 || len(result.IncompleteModules) != 0 {
+		t.Fatalf("unexpected parser diagnostics: unsupported=%v incomplete=%v", result.UnsupportedModules, result.IncompleteModules)
+	}
+}
+
+func TestParseContentIgnoresCommaInBareModuleComment(t *testing.T) {
+	t.Parallel()
+
+	result := ParseContent("mod 'puppetlabs/apache' # temporarily unpinned, pending review\n")
+
+	if len(result.UnsupportedModules) != 0 {
+		t.Fatalf("unexpected unsupported modules: %v", result.UnsupportedModules)
+	}
+	if len(result.IncompleteModules) != 1 || result.IncompleteModules[0] != "puppetlabs/apache@line:1" {
+		t.Fatalf("unexpected incomplete modules: %v", result.IncompleteModules)
+	}
+}
+
 func TestParseFileSupportsRuby19HashSyntax(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +117,34 @@ func TestParseFileSupportsRuby19HashSyntax(t *testing.T) {
 	}
 	if got := result.Modules["example/redis"]; got.Version != "main" || got.Type != ModuleTypeGitBranch {
 		t.Fatalf("unexpected Ruby 1.9 git branch module: %#v", got)
+	}
+}
+
+func TestParseContentSupportsFlexibleOptionWhitespaceWithoutKeySuffixMatches(t *testing.T) {
+	t.Parallel()
+
+	result := ParseContent(
+		"mod 'example/hashrocket', :git=>'https://git.example.com/hashrocket.git', :tag   =>   '2.4.1'\n" +
+			"mod 'example/ruby19', git:'https://git.example.com/ruby19.git', branch:'main'\n" +
+			"mod 'example/default-only', git:'https://git.example.com/default.git', default_branch:'main'\n" +
+			"mod 'example/auxiliary-only', exclude_spec:true\n",
+	)
+
+	if got := result.Modules["example/hashrocket"]; got.Version != "2.4.1" || got.Type != ModuleTypeGitTag {
+		t.Fatalf("unexpected compact hashrocket module: %#v", got)
+	}
+	if got := result.Modules["example/ruby19"]; got.Version != "main" || got.Type != ModuleTypeGitBranch {
+		t.Fatalf("unexpected compact Ruby 1.9 module: %#v", got)
+	}
+	if _, ok := result.Modules["example/default-only"]; ok {
+		t.Fatalf("default_branch was incorrectly treated as branch: %#v", result.Modules["example/default-only"])
+	}
+	wantIncomplete := []string{"example/auxiliary-only@line:4", "example/default-only@line:3"}
+	if len(result.IncompleteModules) != len(wantIncomplete) || result.IncompleteModules[0] != wantIncomplete[0] || result.IncompleteModules[1] != wantIncomplete[1] {
+		t.Fatalf("unexpected incomplete modules: %v", result.IncompleteModules)
+	}
+	if len(result.UnsupportedModules) != 0 {
+		t.Fatalf("unexpected unsupported modules: %v", result.UnsupportedModules)
 	}
 }
 
@@ -233,143 +291,6 @@ func TestParseFileReturnsErrorForMissingFile(t *testing.T) {
 	_, err := ParseFile(filepath.Join(t.TempDir(), "missing-Puppetfile"))
 	if err == nil {
 		t.Fatal("expected ParseFile() to return error for missing file")
-	}
-}
-
-func TestCheckerSnapshotsPuppetfile(t *testing.T) {
-	t.Parallel()
-
-	path := writeTempPuppetfile(t, "mod 'puppetlabs/apt', '11.2.0'\n")
-	now := time.Unix(1_700_000_000, 0)
-	snapshot := NewChecker(path).Snapshot(context.Background(), now)
-
-	if !snapshot.Success {
-		t.Fatalf("Snapshot().Success = false, want true: %v", snapshot.Err)
-	}
-	if !snapshot.AttemptTime.Equal(now) {
-		t.Fatalf("Snapshot().AttemptTime = %v, want %v", snapshot.AttemptTime, now)
-	}
-	if snapshot.Path != path {
-		t.Fatalf("Snapshot().Path = %q, want %q", snapshot.Path, path)
-	}
-	if snapshot.ReadErrorsTotal != 0 {
-		t.Fatalf("Snapshot().ReadErrorsTotal = %d, want 0", snapshot.ReadErrorsTotal)
-	}
-	if got := snapshot.Modules["puppetlabs/apt"]; got.Version != "11.2.0" || got.Type != ModuleTypeForge {
-		t.Fatalf("unexpected checker module: %#v", got)
-	}
-}
-
-func TestCheckerReportsReadErrors(t *testing.T) {
-	t.Parallel()
-
-	checker := NewChecker(filepath.Join(t.TempDir(), "missing-Puppetfile"))
-	first := checker.Snapshot(context.Background(), time.Unix(1_700_000_000, 0))
-	second := checker.Snapshot(context.Background(), time.Unix(1_700_000_001, 0))
-
-	if first.Success || first.Err == nil {
-		t.Fatalf("first Snapshot() success/error = %v/%v, want failed read", first.Success, first.Err)
-	}
-	if second.Success || second.Err == nil {
-		t.Fatalf("second Snapshot() success/error = %v/%v, want failed read", second.Success, second.Err)
-	}
-	if first.ReadErrorsTotal != 1 || second.ReadErrorsTotal != 2 {
-		t.Fatalf("Snapshot().ReadErrorsTotal = %d/%d, want 1/2", first.ReadErrorsTotal, second.ReadErrorsTotal)
-	}
-}
-
-func TestZeroValueCheckerSnapshotsPuppetfile(t *testing.T) {
-	t.Parallel()
-
-	path := writeTempPuppetfile(t, "mod 'puppetlabs/stdlib', '9.6.0'\n")
-	snapshot := NewChecker(path).Snapshot(context.Background(), time.Unix(1_700_000_000, 0))
-
-	if !snapshot.Success {
-		t.Fatalf("Snapshot().Success = false, want true: %v", snapshot.Err)
-	}
-	if got := snapshot.Modules["puppetlabs/stdlib"]; got.Version != "9.6.0" || got.Type != ModuleTypeForge {
-		t.Fatalf("unexpected zero-value checker module: %#v", got)
-	}
-}
-
-func TestCheckerSnapshotsMultiplePuppetfiles(t *testing.T) {
-	t.Parallel()
-
-	pathA := writeTempPuppetfile(t, "mod 'puppetlabs/apt', '11.2.0'\n")
-	pathB := writeTempPuppetfile(t, "mod 'puppetlabs/stdlib', '9.6.0'\n")
-	now := time.Unix(1_700_000_000, 0)
-	snapshot := NewChecker(pathA, pathB).Snapshot(context.Background(), now)
-
-	if !snapshot.Success {
-		t.Fatalf("Snapshot().Success = false, want true: %v", snapshot.Err)
-	}
-	if len(snapshot.Files) != 2 {
-		t.Fatalf("len(Files) = %d, want 2", len(snapshot.Files))
-	}
-	if snapshot.Path != pathA {
-		t.Fatalf("Snapshot().Path = %q, want %q", snapshot.Path, pathA)
-	}
-	if snapshot.Files[0].Path != pathA {
-		t.Fatalf("Files[0].Path = %q, want %q", snapshot.Files[0].Path, pathA)
-	}
-	if snapshot.Files[1].Path != pathB {
-		t.Fatalf("Files[1].Path = %q, want %q", snapshot.Files[1].Path, pathB)
-	}
-	if !snapshot.Files[0].Success || !snapshot.Files[1].Success {
-		t.Fatalf("Files[0].Success = %v, Files[1].Success = %v, want true, true", snapshot.Files[0].Success, snapshot.Files[1].Success)
-	}
-	if snapshot.Files[0].ScrapeDurationSeconds <= 0 {
-		t.Fatalf("Files[0].ScrapeDurationSeconds = %v, want > 0", snapshot.Files[0].ScrapeDurationSeconds)
-	}
-	if snapshot.Files[1].ScrapeDurationSeconds <= 0 {
-		t.Fatalf("Files[1].ScrapeDurationSeconds = %v, want > 0", snapshot.Files[1].ScrapeDurationSeconds)
-	}
-	if snapshot.ReadErrorsTotal != 0 {
-		t.Fatalf("ReadErrorsTotal = %d, want 0", snapshot.ReadErrorsTotal)
-	}
-	if len(snapshot.Modules) != 2 {
-		t.Fatalf("len(Modules) = %d, want 2", len(snapshot.Modules))
-	}
-	if got := snapshot.Modules["puppetlabs/apt"]; got.Version != "11.2.0" || got.Type != ModuleTypeForge {
-		t.Fatalf("unexpected module puppetlabs/apt: %#v", got)
-	}
-	if got := snapshot.Modules["puppetlabs/stdlib"]; got.Version != "9.6.0" || got.Type != ModuleTypeForge {
-		t.Fatalf("unexpected module puppetlabs/stdlib: %#v", got)
-	}
-}
-
-func TestCheckerOneFileFailsAmongMultiple(t *testing.T) {
-	t.Parallel()
-
-	pathA := writeTempPuppetfile(t, "mod 'puppetlabs/apt', '11.2.0'\n")
-	pathB := filepath.Join(t.TempDir(), "missing-Puppetfile")
-	now := time.Unix(1_700_000_000, 0)
-	snapshot := NewChecker(pathA, pathB).Snapshot(context.Background(), now)
-
-	if snapshot.Success {
-		t.Fatal("Snapshot().Success = true, want false (one file is missing)")
-	}
-	if len(snapshot.Files) != 2 {
-		t.Fatalf("len(Files) = %d, want 2", len(snapshot.Files))
-	}
-	if !snapshot.Files[0].Success {
-		t.Fatalf("Files[0].Success = false, want true")
-	}
-	if snapshot.Files[1].Success {
-		t.Fatalf("Files[1].Success = true, want false (missing file)")
-	}
-	if snapshot.Files[1].Err == nil {
-		t.Fatal("Files[1].Err = nil, want non-nil")
-	}
-	if snapshot.ReadErrorsTotal != 1 {
-		t.Fatalf("ReadErrorsTotal = %d, want 1", snapshot.ReadErrorsTotal)
-	}
-	// aggregate Modules should only contain the successful file
-	if len(snapshot.Modules) != 1 {
-		t.Fatalf("len(Modules) = %d, want 1", len(snapshot.Modules))
-	}
-	if _, ok := snapshot.Modules["puppetlabs/apt"]; !ok {
-		t.Fatalf("Modules missing puppetlabs/apt: %#v", snapshot.Modules)
 	}
 }
 

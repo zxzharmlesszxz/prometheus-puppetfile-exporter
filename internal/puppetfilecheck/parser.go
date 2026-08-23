@@ -40,6 +40,7 @@ func ParseContent(content string) ParseResult {
 			continue
 		}
 
+		hasArgumentSeparator := strings.HasPrefix(argsBody, ",")
 		argsBody = strings.TrimLeft(argsBody, ",")
 		argsBody = strings.TrimSpace(argsBody)
 		lineNum := i + 1
@@ -62,8 +63,8 @@ func ParseContent(content string) ParseResult {
 			continue
 		}
 
-		// No comma after module name -> single-line mod with nothing else
-		if !strings.Contains(rawLine, ",") {
+		// No comma after module name -> single-line mod with nothing else.
+		if !hasArgumentSeparator {
 			result.IncompleteModules = append(result.IncompleteModules, fmt.Sprintf("%s@line:%d", name, lineNum))
 			continue
 		}
@@ -91,10 +92,21 @@ func ParseContent(content string) ParseResult {
 
 // stripComment removes Ruby-style # comments outside quoted strings.
 func stripComment(line string) string {
+	if index := indexUnquoted(line, func(i int) bool { return line[i] == '#' }); index >= 0 {
+		return line[:index]
+	}
+	return line
+}
+
+func indexUnquoted(line string, match func(int) bool) int {
 	inSingle := false
 	inDouble := false
 	for i := 0; i < len(line); i++ {
 		switch line[i] {
+		case '\\':
+			if (inSingle || inDouble) && i+1 < len(line) {
+				i++
+			}
 		case '\'':
 			if !inDouble {
 				inSingle = !inSingle
@@ -103,13 +115,12 @@ func stripComment(line string) string {
 			if !inSingle {
 				inDouble = !inDouble
 			}
-		case '#':
-			if !inSingle && !inDouble {
-				return line[:i]
-			}
+		}
+		if !inSingle && !inDouble && match(i) {
+			return i
 		}
 	}
-	return line
+	return -1
 }
 
 // scanQuoted extracts the first single-quoted or double-quoted string from s.
@@ -129,10 +140,21 @@ func scanQuoted(s string) (value string, rest string, ok bool) {
 		return "", "", false
 	}
 
+	var builder strings.Builder
+	builder.Grow(len(s) - 2)
 	for i := 1; i < len(s); i++ {
-		if s[i] == quote {
-			return s[1:i], strings.TrimSpace(s[i+1:]), true
+		if s[i] == '\\' && i+1 < len(s) {
+			next := s[i+1]
+			if next == quote || next == '\\' {
+				builder.WriteByte(next)
+				i++
+				continue
+			}
 		}
+		if s[i] == quote {
+			return builder.String(), strings.TrimSpace(s[i+1:]), true
+		}
+		builder.WriteByte(s[i])
 	}
 	return "", "", false
 }
@@ -203,7 +225,7 @@ func mergeSourceOptions(repo, tag, branch, ref, commit string, sawKnown bool, li
 
 	if containsLineOption(line, "install_path") ||
 		containsLineOption(line, "default_branch") ||
-		strings.Contains(line, "exclude_spec") {
+		containsLineOption(line, "exclude_spec") {
 		sawKnown = true
 	}
 
@@ -218,47 +240,68 @@ func extractValue(line, key string) string {
 		return ""
 	}
 
-	// :key => 'value' or :key => :symbol
-	prefix := ":" + key + " => "
-	if idx := strings.Index(line, prefix); idx >= 0 {
-		rest := strings.TrimSpace(line[idx+len(prefix):])
-		if val, _, ok := scanQuoted(rest); ok {
-			return val
-		}
-		if rest != "" && rest[0] == ':' {
-			end := strings.IndexAny(rest, ", \t")
-			if end < 0 {
-				end = len(rest)
-			}
-			return rest[1:end]
-		}
+	rest, found := optionRemainder(line, key)
+	if !found {
+		return ""
 	}
-
-	// key: 'value' (Ruby 1.9)
-	prefix = key + ": "
-	if idx := strings.Index(line, prefix); idx >= 0 {
-		rest := strings.TrimSpace(line[idx+len(prefix):])
-		if val, _, ok := scanQuoted(rest); ok {
-			return val
-		}
-		// Symbol value
-		if rest != "" && rest[0] == ':' {
-			end := strings.IndexAny(rest, ", \t")
-			if end < 0 {
-				end = len(rest)
-			}
-			return rest[1:end]
-		}
+	if value, ok := extractOptionValue(rest); ok {
+		return value
 	}
 
 	return ""
 }
 
+func optionRemainder(line, key string) (string, bool) {
+	if idx := indexOptionToken(line, ":"+key); idx >= 0 {
+		rest := strings.TrimLeft(line[idx+len(key)+1:], " \t")
+		if strings.HasPrefix(rest, "=>") {
+			return strings.TrimSpace(rest[2:]), true
+		}
+	}
+
+	token := key + ":"
+	idx := indexOptionToken(line, token)
+	if idx < 0 {
+		return "", false
+	}
+	return strings.TrimSpace(line[idx+len(token):]), true
+}
+
+func indexOptionToken(line, token string) int {
+	return indexUnquoted(line, func(i int) bool {
+		return i+len(token) <= len(line) &&
+			strings.HasPrefix(line[i:], token) &&
+			(i == 0 || !isIdentifierByte(line[i-1]))
+	})
+}
+
+func isIdentifierByte(value byte) bool {
+	return value == '_' ||
+		(value >= 'a' && value <= 'z') ||
+		(value >= 'A' && value <= 'Z') ||
+		(value >= '0' && value <= '9')
+}
+
+func extractOptionValue(raw string) (string, bool) {
+	rest := strings.TrimSpace(raw)
+	if val, _, ok := scanQuoted(rest); ok {
+		return val, true
+	}
+	if rest == "" || rest[0] != ':' {
+		return "", false
+	}
+
+	end := strings.IndexAny(rest, ", \t")
+	if end < 0 {
+		end = len(rest)
+	}
+	return rest[1:end], true
+}
+
 // containsLineOption checks if a line contains a Puppetfile option key.
 func containsLineOption(line, key string) bool {
-	line = strings.TrimSpace(line)
-	return strings.Contains(line, ":"+key+" => ") ||
-		strings.Contains(line, key+": ")
+	_, found := optionRemainder(strings.TrimSpace(line), key)
+	return found
 }
 
 func resolvePinnedVersion(tag string, branch string, ref string, commit string) (string, ModuleType, bool) {
