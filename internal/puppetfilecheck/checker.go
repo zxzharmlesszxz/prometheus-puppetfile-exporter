@@ -9,11 +9,13 @@ import (
 	"time"
 
 	framework "github.com/zxzharmlesszxz/prometheus-exporter-framework/exporter"
+	"github.com/zxzharmlesszxz/prometheus-exporter-framework/exporter/featurekit"
 )
 
 type Checker struct {
 	paths    []string
 	counters map[string]*fileCounters
+	state    *featurekit.LastKnownGood[string, ParseResult]
 }
 
 type fileCounters struct {
@@ -42,6 +44,7 @@ func NewChecker(paths ...string) *Checker {
 	return &Checker{
 		paths:    cleaned,
 		counters: counters,
+		state:    featurekit.NewLastKnownGood[string, ParseResult](SourceDataStaleAfter),
 	}
 }
 
@@ -56,7 +59,7 @@ func (c *Checker) Snapshot(ctx context.Context, now time.Time) Snapshot {
 	var parseErrorsTotal uint64
 
 	for _, path := range c.paths {
-		fs := c.scrapeFile(ctx, path)
+		fs := c.scrapeFile(ctx, path, now)
 		files = append(files, fs)
 		if !fs.Success {
 			allSuccess = false
@@ -108,7 +111,7 @@ func (c *Checker) Snapshot(ctx context.Context, now time.Time) Snapshot {
 	}
 }
 
-func (c *Checker) scrapeFile(ctx context.Context, path string) FileSnapshot {
+func (c *Checker) scrapeFile(ctx context.Context, path string, now time.Time) FileSnapshot {
 	var result ParseResult
 	counters := c.counters[path]
 	scrape := framework.FileScraper{
@@ -144,6 +147,13 @@ func (c *Checker) scrapeFile(ctx context.Context, path string) FileSnapshot {
 			fs.ParseErrorsTotal = counters.parseErrorsTotal.Load()
 		}
 	}
+
+	if fs.Success && fs.Valid {
+		c.state.Success(path, result, now)
+	} else {
+		c.state.Failure(path, now)
+	}
+	fs.LastKnownGood = c.state.Get(path, now)
 
 	return fs
 }

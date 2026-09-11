@@ -1,6 +1,10 @@
 package puppetfilecheck
 
-import "time"
+import (
+	"time"
+
+	"github.com/zxzharmlesszxz/prometheus-exporter-framework/exporter/featurekit"
+)
 
 type ModuleType string
 
@@ -11,6 +15,7 @@ const (
 	ModuleTypeGitRef      ModuleType = "git+ref"
 	ModuleTypeGitCommit   ModuleType = "git+commit"
 	DefaultPuppetfilePath            = "/etc/puppetlabs/code/environments/production/Puppetfile"
+	SourceDataStaleAfter             = 5 * time.Minute
 )
 
 type ModuleInfo struct {
@@ -40,6 +45,7 @@ type FileSnapshot struct {
 	Modules               Modules
 	UnsupportedModules    []string
 	IncompleteModules     []string
+	LastKnownGood         featurekit.LastKnownGoodResult[ParseResult]
 }
 
 type Snapshot struct {

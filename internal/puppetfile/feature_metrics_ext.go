@@ -46,6 +46,7 @@ func (state *featureMetricState) CollectFeatureMetrics(ctx featurekit.FeatureMet
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricReadErrors), prometheus.CounterValue, float64(file.ReadErrorsTotal), file.Path)
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricParseErrors), prometheus.CounterValue, float64(file.ParseErrorsTotal), file.Path)
 		ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricScrapeDuration), prometheus.GaugeValue, file.ScrapeDurationSeconds, file.Path)
+		featurekit.CollectLastKnownGoodMetrics(ctx, ch, sourceLastKnownGoodMetricIDs, file.LastKnownGood, file.Path)
 
 		if !file.Success {
 			ch <- prometheus.MustNewConstMetric(ctx.Descriptors.Get(metricModulesDiscovered), prometheus.GaugeValue, 0, file.Path)

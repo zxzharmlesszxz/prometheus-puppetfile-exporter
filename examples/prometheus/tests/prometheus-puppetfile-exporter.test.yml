@@ -83,6 +83,27 @@ tests:
               description: |
                 prometheus-puppetfile-exporter read Puppetfile but found unsupported or incomplete module declarations for at least 10 minutes.
 
+  - name: Last-known-good source data alerts after becoming stale
+    interval: 1m
+    input_series:
+      - series: 'puppetfile_source_data_stale{job="puppetfile-exporter",instance="exporter:9820",path="/stale/Puppetfile"}'
+        values: '1x20'
+      - series: 'puppetfile_source_data_stale{job="puppetfile-exporter",instance="exporter:9820",path="/fresh/Puppetfile"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: PuppetfileSourceDataStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: puppetfile-exporter
+              instance: exporter:9820
+              path: /stale/Puppetfile
+            exp_annotations:
+              summary: Puppetfile source has stale valid data
+              description: |
+                The last valid data for /stale/Puppetfile is older than 5 minutes and subsequent refreshes have failed.
+
   - name: Module and counter alerts use domain metrics
     interval: 1m
     input_series:

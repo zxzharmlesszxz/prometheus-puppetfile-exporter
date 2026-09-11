@@ -18,7 +18,9 @@ const (
 	metricModuleStatus         = "module_status"
 )
 
-var featureMetricSpecs = []featurekit.FeatureMetricSpec{
+var sourceLastKnownGoodMetricIDs = featurekit.LastKnownGoodMetricIDsFor("source")
+
+var featureMetricSpecs = append([]featurekit.FeatureMetricSpec{
 	{
 		ID:     metricUp,
 		Scope:  featurekit.MetricScopeFeature,
@@ -110,4 +112,4 @@ var featureMetricSpecs = []featurekit.FeatureMetricSpec{
 		Help:   "1 if the module declaration is supported and well-formed, 0 otherwise.",
 		Labels: []string{"path", "module"},
 	},
-}
+}, featurekit.LastKnownGoodMetricSpecs("source", []string{"path"})...)

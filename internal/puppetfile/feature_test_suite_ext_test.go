@@ -13,6 +13,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/zxzharmlesszxz/prometheus-exporter-framework/exporter/exportertest"
 	"github.com/zxzharmlesszxz/prometheus-exporter-framework/exporter/exportertest/featuretest"
+	"github.com/zxzharmlesszxz/prometheus-exporter-framework/exporter/featurekit"
 
 	"github.com/zxzharmlesszxz/prometheus-puppetfile-exporter/internal/puppetfilecheck"
 )
@@ -140,6 +141,11 @@ func testCollectorExportsPuppetfileMetrics(t *testing.T, suite *FeatureTestSuite
 					},
 					UnsupportedModules: []string{"example/local@line:1"},
 					IncompleteModules:  []string{"broken-module@line:3"},
+					LastKnownGood: featurekit.LastKnownGoodResult[puppetfilecheck.ParseResult]{
+						Available:   true,
+						LastSuccess: now,
+						LastAttempt: now,
+					},
 				},
 			},
 		},
@@ -165,6 +171,10 @@ func testCollectorExportsPuppetfileMetrics(t *testing.T, suite *FeatureTestSuite
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricIncompleteModules), nil, 1)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricFilesMonitored), nil, 1)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricDeclaredModulesTotal), nil, 3)
+	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", sourceLastKnownGoodMetricIDs.LastSuccessTimestampSeconds), nil, float64(now.Unix()))
+	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", sourceLastKnownGoodMetricIDs.ConsecutiveFailures), nil, 0)
+	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", sourceLastKnownGoodMetricIDs.DataAvailable), nil, 1)
+	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", sourceLastKnownGoodMetricIDs.DataStale), nil, 0)
 	assertModuleStatuses(t, families, suite)
 	exportertest.AssertMetricValue(t, families, testLastSuccess, nil, 1)
 	exportertest.AssertMetricValue(t, families, testLastTimestamp, nil, float64(now.Unix()))
@@ -267,6 +277,7 @@ func testCollectorReportsFailedSnapshot(t *testing.T, suite *FeatureTestSuite) {
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricUnsupportedModules), nil, 0)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricIncompleteModules), nil, 0)
 	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", metricDeclaredModulesTotal), nil, 0)
+	exportertest.AssertMetricValue(t, families, suite.MetricName(testFeatureName, "", sourceLastKnownGoodMetricIDs.DataAvailable), nil, 0)
 	exportertest.AssertMetricValue(t, families, testLastSuccess, nil, 0)
 }
 

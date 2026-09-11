@@ -565,6 +565,11 @@
                         "Time 3": true,
                         "Time 4": true,
                         "Time 5": true,
+                        "environment 1": true,
+                        "environment 2": true,
+                        "environment 3": true,
+                        "environment 4": true,
+                        "environment 5": true,
                         "Value": true,
                         "Value #A": true,
                         "__name__": true,
@@ -3294,7 +3299,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "label_replace(puppetfile_up{job=~\"$job\"}, \"health_metric\", \"up\", \"job\", \".*\") or label_replace(puppetfile_valid{job=~\"$job\"}, \"health_metric\", \"valid\", \"job\", \".*\")",
+                        "expr": "label_replace(puppetfile_up{job=~\"$job\"}, \"health_metric\", \"up\", \"job\", \".*\") or label_replace(puppetfile_valid{job=~\"$job\"}, \"health_metric\", \"valid\", \"job\", \".*\") or label_replace(puppetfile_source_data_available{job=~\"$job\"}, \"health_metric\", \"data available\", \"job\", \".*\") or label_replace(puppetfile_source_data_stale{job=~\"$job\"}, \"health_metric\", \"data stale\", \"job\", \".*\") or label_replace(puppetfile_source_consecutive_failures{job=~\"$job\"}, \"health_metric\", \"consecutive failures\", \"job\", \".*\")",
                         "legendFormat": "{{health_metric}} {{path}} {{instance}}",
                         "range": true,
                         "instant": false
@@ -3830,8 +3835,8 @@
         "kind": "Panel",
         "spec": {
           "id": 31,
-          "title": "Readable Puppetfiles",
-          "description": "Ratio of Puppetfile sources readable during the last collection.",
+          "title": "Source Availability",
+          "description": "Current readability plus availability and freshness of the last valid Puppetfile data.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3856,6 +3861,50 @@
                       }
                     },
                     "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${DS_PROMETHEUS}"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "sum(puppetfile_source_data_available{job=~\"$job\"}) / count(puppetfile_source_data_available{job=~\"$job\"})",
+                        "legendFormat": "valid data available",
+                        "range": false,
+                        "instant": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "${DS_PROMETHEUS}"
+                      },
+                      "spec": {
+                        "editorMode": "code",
+                        "expr": "(sum(puppetfile_source_data_available{job=~\"$job\"}) - sum(puppetfile_source_data_stale{job=~\"$job\"})) / count(puppetfile_source_data_available{job=~\"$job\"})",
+                        "legendFormat": "valid data fresh",
+                        "range": false,
+                        "instant": true
+                      }
+                    },
+                    "refId": "C",
                     "hidden": false
                   }
                 }

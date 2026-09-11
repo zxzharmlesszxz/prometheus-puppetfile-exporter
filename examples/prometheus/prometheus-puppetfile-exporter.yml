@@ -53,6 +53,16 @@ groups:
           description: |
             prometheus-puppetfile-exporter read Puppetfile but found unsupported or incomplete module declarations for at least 10 minutes.
 
+      - alert: PuppetfileSourceDataStale
+        expr: puppetfile_source_data_stale{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Puppetfile source has stale valid data
+          description: |
+            The last valid data for {{ $labels.path }} is older than 5 minutes and subsequent refreshes have failed.
+
       - alert: PuppetfileStale
         expr: puppetfile_mtime_seconds{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 0 and time() - puppetfile_mtime_seconds{job=~"^(prometheus[_-])?puppetfile[_-]exporter$"} > 86400
         for: 1h

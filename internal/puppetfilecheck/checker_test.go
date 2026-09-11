@@ -2,6 +2,7 @@ package puppetfilecheck
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -29,6 +30,9 @@ func TestCheckerSnapshotsPuppetfile(t *testing.T) {
 	if got := snapshot.Modules["puppetlabs/apt"]; got.Version != "11.2.0" || got.Type != ModuleTypeForge {
 		t.Fatalf("unexpected checker module: %#v", got)
 	}
+	if !snapshot.Files[0].LastKnownGood.Available || snapshot.Files[0].LastKnownGood.ConsecutiveFailures != 0 {
+		t.Fatalf("LastKnownGood = %#v, want available without failures", snapshot.Files[0].LastKnownGood)
+	}
 }
 
 func TestCheckerReportsReadErrors(t *testing.T) {
@@ -46,6 +50,43 @@ func TestCheckerReportsReadErrors(t *testing.T) {
 	}
 	if first.ReadErrorsTotal != 1 || second.ReadErrorsTotal != 2 {
 		t.Fatalf("Snapshot().ReadErrorsTotal = %d/%d, want 1/2", first.ReadErrorsTotal, second.ReadErrorsTotal)
+	}
+	if first.Files[0].LastKnownGood.Available || first.Files[0].LastKnownGood.ConsecutiveFailures != 1 {
+		t.Fatalf("first LastKnownGood = %#v, want unavailable with one failure", first.Files[0].LastKnownGood)
+	}
+	if second.Files[0].LastKnownGood.Available || second.Files[0].LastKnownGood.ConsecutiveFailures != 2 {
+		t.Fatalf("second LastKnownGood = %#v, want unavailable with two failures", second.Files[0].LastKnownGood)
+	}
+}
+
+func TestCheckerRetainsAndStalesLastKnownGood(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempPuppetfile(t, "mod 'puppetlabs/apt', '11.2.0'\n")
+	checker := NewChecker(path)
+	now := time.Unix(1_700_000_000, 0)
+	first := checker.Snapshot(context.Background(), now)
+
+	if err := os.WriteFile(path, []byte("mod 'puppetlabs/apt'\n"), 0o644); err != nil {
+		t.Fatalf("write invalid Puppetfile: %v", err)
+	}
+	second := checker.Snapshot(context.Background(), now.Add(time.Minute))
+	if second.Files[0].Valid {
+		t.Fatal("second FileSnapshot.Valid = true, want false")
+	}
+	if got := second.Files[0].LastKnownGood; !got.Available || got.Stale || got.ConsecutiveFailures != 1 || got.Value.Modules["puppetlabs/apt"].Version != "11.2.0" {
+		t.Fatalf("second LastKnownGood = %#v, want retained fresh module after one failure", got)
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove Puppetfile: %v", err)
+	}
+	third := checker.Snapshot(context.Background(), now.Add(SourceDataStaleAfter))
+	if got := third.Files[0].LastKnownGood; !got.Available || !got.Stale || got.ConsecutiveFailures != 2 || !got.LastSuccess.Equal(now) {
+		t.Fatalf("third LastKnownGood = %#v, want retained stale data after two failures", got)
+	}
+	if !first.Files[0].LastKnownGood.LastSuccess.Equal(now) {
+		t.Fatalf("first LastKnownGood.LastSuccess = %v, want %v", first.Files[0].LastKnownGood.LastSuccess, now)
 	}
 }
 
