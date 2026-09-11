@@ -62,6 +62,32 @@ Metric ownership follows three namespaces:
 - Labels: `path`
 - Notes: source validity metric for dashboards and alerts
 
+### `puppetfile_source_last_success_timestamp_seconds`
+
+- Type: gauge
+- Value: Unix timestamp of the last refresh that produced a readable, valid Puppetfile
+- Labels: `path`
+- Notes: remains unchanged across subsequent read or parse failures
+
+### `puppetfile_source_consecutive_failures`
+
+- Type: gauge
+- Value: consecutive read or parse-invalid refreshes since the last valid result
+- Labels: `path`
+
+### `puppetfile_source_data_available`
+
+- Type: gauge
+- Value: `1` after at least one valid result has been observed, otherwise `0`
+- Labels: `path`
+
+### `puppetfile_source_data_stale`
+
+- Type: gauge
+- Value: `1` when the last valid result is at least five minutes old, otherwise `0`
+- Labels: `path`
+- Notes: current readability and validity remain visible through `puppetfile_up` and `puppetfile_valid`; stale state does not replace current module metrics with cached data
+
 ### `puppetfile_mtime_seconds`
 
 - Type: gauge

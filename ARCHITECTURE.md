@@ -41,11 +41,16 @@ Common exporter bootstrap, standard flags, logging, version metadata, Prometheus
    delegates each Puppetfile read and parse to `internal/puppetfilecheck`.
 7. The snapshot collector refreshes the combined Puppetfile state in the background.
 8. Prometheus scrapes expose the latest successful or failed snapshot.
-9. Supported module declarations are exported as `puppetfile_module_info`.
-10. Unsupported or incomplete declarations are skipped and counted in
+9. Per-path `featurekit.LastKnownGood` state records the last readable and valid
+   Puppetfile refresh separately from current source health. It drives
+   availability, consecutive-failure, last-success, and staleness metrics but
+   does not replace current module data after a failed refresh.
+10. Supported module declarations are exported as `puppetfile_module_info`.
+11. Unsupported or incomplete declarations are skipped and counted in
     diagnostics metrics.
-11. If the file cannot be read or parsed at all, `puppetfile_up` is set to `0`
-    and business metrics are omitted.
+12. If the file cannot be read, `puppetfile_up` is set to `0` and current
+    business metrics are omitted. Unsupported or incomplete declarations keep
+    `puppetfile_up` at `1` and set `puppetfile_valid` to `0`.
 
 ## Container Defaults
 

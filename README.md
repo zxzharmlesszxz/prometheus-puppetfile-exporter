@@ -26,6 +26,10 @@ Important metric groups:
 - `puppetfile_exporter_*` for framework/exporter runtime and collection health
 - `puppetfile_up`
 - `puppetfile_valid`
+- `puppetfile_source_data_available`
+- `puppetfile_source_data_stale`
+- `puppetfile_source_consecutive_failures`
+- `puppetfile_source_last_success_timestamp_seconds`
 - `puppetfile_mtime_seconds`
 - `puppetfile_module_info`
 - `puppetfile_modules_discovered`
@@ -38,6 +42,11 @@ Important metric groups:
 
 The exporter emits `puppetfile_exporter_*` and `puppetfile_*`. Prometheus adds
 the target-level `scrape_*` and `up` series when it scrapes the exporter.
+
+Per Puppetfile path, the exporter tracks the last valid source refresh. These
+metrics keep current read/parse failures distinct from the availability and
+freshness of previously valid data. Cached data is not substituted into the
+current module metrics.
 
 ## Input Semantics
 
@@ -85,7 +94,9 @@ Labels:
 - `cmd` contains the minimal process entrypoint.
 - `internal/exporter` contains the thin scaffold-owned adapter that creates the Puppetfile feature and delegates injected project metadata to the framework.
 - `internal/puppetfile` contains the Puppetfile feature spec, collector metrics,
-  snapshot gathering, and parser.
+  and snapshot integration.
+- `internal/puppetfilecheck` contains path-level reads, parsing, diagnostics, and
+  last-known-good source state.
 
 Common exporter bootstrap, HTTP handlers, registry wiring, landing page, health endpoint, logging, and version metadata are provided by `github.com/zxzharmlesszxz/prometheus-exporter-framework`.
 
@@ -112,6 +123,10 @@ make build
 ```bash
 make compose
 ```
+
+Override `COMPOSE_EXPORTER_HOST_PORT` to change only the host-side exporter
+port. The container, its health check, and the Prometheus scrape target keep
+using port `9820`.
 
 This starts:
 
@@ -178,11 +193,18 @@ puppetfile_path: /etc/puppetlabs/code/environments/*/Puppetfile,/opt/extra/Puppe
 Use your own file either by editing `configs.exporter_puppetfile` in [`docker-compose.yml`](docker-compose.yml), by running the image directly with explicit flags, or by running locally:
 
 ```bash
-docker run --rm -p 9820:9820 \
+docker run --rm -p 127.0.0.1:9820:9820 \
   -v "$PWD/my-Puppetfile:/Puppetfile:ro" \
   prometheus-puppetfile-exporter \
   --puppetfile.puppetfile-path=/Puppetfile
 ```
+
+## Build Configuration
+
+`Makefile.mk` contains the scaffold-owned exporter identity and contract.
+Overridable tooling, build metadata, image tags, and Compose defaults live in
+`Makefile.defaults.mk`. Put persistent machine-local overrides in the ignored
+`Makefile.local`; do not edit the rendered contract for local configuration.
 
 ## Logging
 
@@ -206,7 +228,7 @@ At `debug` level it logs successful collection with the number of exported modul
 
 ## Tests
 
-Run the local Go checks with Go 1.26+:
+Run the local Go checks with Go 1.27.1+:
 
 ```bash
 make go-check
@@ -248,17 +270,22 @@ Example Prometheus alert rules live in [`examples/prometheus/prometheus-puppetfi
 They use `job=~"^(prometheus[_-])?puppetfile[_-]exporter$"` and cover exporter
 scrape availability, framework collection failure/staleness, unreadable and
 parse-invalid Puppetfiles, module source/domain problems, and read/parse error
-counter increases.
+counter increases. A per-path alert also reports when the last valid source
+data remains stale after repeated failures.
 
 ## Grafana Dashboard
 
 Adapted Grafana dashboard JSON for this exporter lives in [`examples/grafana/prometheus-puppetfile-exporter.json`](examples/grafana/prometheus-puppetfile-exporter.json).
-It uses Grafana dashboard schema v2: domain status stats and the Puppetfile
+It uses Grafana dashboard schema v2: domain status stats, last-valid source
+availability, and the Puppetfile
 module table lead the Overview tab, Source Health stays on that tab, exporter
 collection graphs use two columns, and the collapsed historical row uses three.
 
 ## CI
 
-GitHub Actions CI lives in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). It runs the Go checks in `golang:1.27.0-alpine`, validates examples, smoke-tests the Docker image, publishes release archives on tags, and pushes tagged images to GHCR.
+GitHub Actions CI lives in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+and delegates checks, example validation, Docker smoke tests, release archives,
+and GHCR publishing to the framework reusable workflow at `v0.7.0` using Go
+1.27.1.
 
 The legacy GitLab definition remains in [`.gitlab-ci.yml`](.gitlab-ci.yml).
