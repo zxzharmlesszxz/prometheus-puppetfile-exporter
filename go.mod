@@ -6,7 +6,8 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/zxzharmlesszxz/prometheus-exporter-framework v0.7.0
+	github.com/zxzharmlesszxz/prometheus-exporter-framework v0.7.1
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
@@ -27,7 +28,6 @@ require (
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect

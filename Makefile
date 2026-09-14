@@ -2,7 +2,7 @@ include Makefile.mk
 include Makefile.defaults.mk
 -include Makefile.local
 
-.PHONY: help build release release-archives release-checksums release-smoke docker-build docker-buildx docker-buildx-push docker-push fmt fmt-check print-ldflags vet staticcheck govulncheck golangci-lint test test-race coverage coverage-check smoke promtool-check promtool-rules-test compose compose-up compose-down compose-logs compose-config examples-check docker-smoke-build docker-smoke-image docker-smoke go-check check full-check clean size require-rendered-template
+.PHONY: help build release release-archives release-checksums release-smoke release-preflight release-version-check release-worktree-check release-tag-check push-release docker-build docker-buildx docker-buildx-push docker-push fmt fmt-check print-ldflags vet staticcheck govulncheck golangci-lint test test-race coverage coverage-check smoke promtool-check promtool-rules-test compose compose-up compose-down compose-logs compose-config examples-check docker-smoke-build docker-smoke-image docker-smoke go-check check full-check clean size require-rendered-template
 .SILENT: compose compose-config compose-down compose-logs compose-up size
 
 help: ## Show available make targets.
@@ -75,6 +75,38 @@ release-smoke: release ## Build release archives and smoke-test the native archi
 	if [ "$$goos" = "windows" ]; then binary="$$binary.exe"; fi; \
 	"$$binary" --help 2>&1 | grep -F "usage: $(PROJECT_NAME) [<flags>]" >/dev/null; \
 	"$$binary" --version 2>&1 | grep -F "$(VERSION)" >/dev/null
+
+release-preflight: release-version-check full-check ## Run all checks required before pushing a release tag. Set VERSION=vX.Y.Z.
+
+release-version-check: ## Validate VERSION for release targets.
+	@test -n "$(VERSION)" || { echo "VERSION is required, for example VERSION=v0.1.0" >&2; exit 2; }
+	@case "$(VERSION)" in \
+		v0.[0-9]*.[0-9]*|v1.[0-9]*.[0-9]*) ;; \
+		*) echo "VERSION must look like v0.1.0 or v1.2.3; v2+ requires a /v2 module path" >&2; exit 2 ;; \
+	esac
+
+release-worktree-check: ## Verify the worktree is clean before release.
+	@test -z "$$(git status --porcelain)" || { echo "worktree has uncommitted changes; commit or stash before release" >&2; exit 2; }
+
+release-tag-check: release-version-check ## Verify release tag does not already exist locally or remotely.
+	@if git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null; then \
+		echo "local tag already exists: $(VERSION)" >&2; \
+		exit 2; \
+	fi
+	@if git ls-remote --exit-code --tags origin "refs/tags/$(VERSION)" >/dev/null 2>&1; then \
+		echo "remote tag already exists: $(VERSION)" >&2; \
+		exit 2; \
+	fi
+
+push-release: release-worktree-check release-tag-check release-preflight ## Run release preflight, tag HEAD, and push the release tag. Set VERSION=vX.Y.Z.
+	@current_branch="$$(git branch --show-current)"; \
+	if [ "$$current_branch" != "main" ]; then \
+		echo "push-release must run from main, got $$current_branch" >&2; \
+		exit 2; \
+	fi
+	git push origin HEAD:main
+	git tag -a "$(VERSION)" -m "Release $(VERSION)"
+	git push origin "$(VERSION)"
 
 vet: ## Run go vet.
 	$(GO) vet -buildvcs=false ./...

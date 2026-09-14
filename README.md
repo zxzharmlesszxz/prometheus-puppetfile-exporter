@@ -240,6 +240,12 @@ Validate the shipped Prometheus and Compose examples:
 make examples-check
 ```
 
+Scaffold contract tests verify the rendered Compose and dashboard definitions
+and require every Prometheus alert to have a project-specific promtool rule
+test. Grafana-managed alert definitions are optional; when present under
+`examples/grafana/alerting`, their metadata and expressions must mirror the
+Prometheus rules.
+
 Build and smoke-test the Docker image:
 
 ```bash
@@ -251,6 +257,16 @@ Build release archives and smoke-test the native archive:
 ```bash
 make release-smoke
 ```
+
+Run the complete release preflight, push `main`, and create and push an
+annotated tag:
+
+```bash
+make push-release VERSION=v0.3.1
+```
+
+The target requires a clean `main` worktree and rejects an existing local or
+remote tag before running the full check suite.
 
 ## Scaffold-Owned Go Files
 
@@ -285,7 +301,7 @@ collection graphs use two columns, and the collapsed historical row uses three.
 
 GitHub Actions CI lives in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 and delegates checks, example validation, Docker smoke tests, release archives,
-and GHCR publishing to the framework reusable workflow at `v0.7.0` using Go
+and GHCR publishing to the framework reusable workflow at `v0.7.1` using Go
 1.27.1.
 
 The legacy GitLab definition remains in [`.gitlab-ci.yml`](.gitlab-ci.yml).
