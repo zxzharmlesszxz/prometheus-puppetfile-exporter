@@ -3398,8 +3398,8 @@
         "kind": "Panel",
         "spec": {
           "id": 27,
-          "title": "Source MTime Age",
-          "description": "Age of each monitored Puppetfile modification timestamp.",
+          "title": "Source Data Age",
+          "description": "Age of each Puppetfile modification timestamp and its last valid refresh.",
           "links": [],
           "data": {
             "kind": "QueryGroup",
@@ -3417,8 +3417,8 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "time() - puppetfile_mtime_seconds{job=~\"$job\"}",
-                        "legendFormat": "{{path}} {{instance}}",
+                        "expr": "label_replace(time() - (puppetfile_mtime_seconds{job=~\"$job\"} > 0), \"age_metric\", \"mtime\", \"job\", \".*\") or label_replace(time() - (puppetfile_source_last_success_timestamp_seconds{job=~\"$job\"} > 0), \"age_metric\", \"last valid refresh\", \"job\", \".*\")",
+                        "legendFormat": "{{age_metric}} {{path}} {{instance}}",
                         "range": true,
                         "instant": false
                       }

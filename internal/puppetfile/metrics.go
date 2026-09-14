@@ -25,7 +25,7 @@ var featureMetricSpecs = append([]featurekit.FeatureMetricSpec{
 		ID:     metricUp,
 		Scope:  featurekit.MetricScopeFeature,
 		Name:   "_up",
-		Help:   "1 if Puppetfile was read and parsed successfully.",
+		Help:   "1 if Puppetfile was read successfully.",
 		Labels: []string{"path"},
 	},
 	{

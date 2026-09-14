@@ -298,7 +298,7 @@ data remains stale after repeated failures.
 
 Adapted Grafana dashboard JSON for this exporter lives in [`examples/grafana/prometheus-puppetfile-exporter.json`](examples/grafana/prometheus-puppetfile-exporter.json).
 It uses Grafana dashboard schema v2: domain status stats, last-valid source
-availability, and the Puppetfile
+availability and age, and the Puppetfile
 module table lead the Overview tab, Source Health stays on that tab, exporter
 collection graphs use two columns, and the collapsed historical row uses three.
 
