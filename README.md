@@ -140,7 +140,10 @@ Then inspect metrics directly:
 curl http://localhost:9820/metrics
 ```
 
-Prometheus scrapes the exporter automatically, and Grafana provisions both the Prometheus datasource and the dashboard from `examples/grafana/prometheus-puppetfile-exporter.json`.
+Prometheus scrapes the exporter automatically, and Grafana provisions the
+Prometheus datasource, the dashboard from
+`examples/grafana/prometheus-puppetfile-exporter.json`, and matching managed
+alert rules from `examples/grafana/alerting/prometheus-puppetfile-exporter.yml`.
 The local Prometheus also loads example alert rules from `examples/prometheus/prometheus-puppetfile-exporter.yml`.
 
 ## Docker Image Defaults
@@ -242,9 +245,9 @@ make examples-check
 
 Scaffold contract tests verify the rendered Compose and dashboard definitions
 and require every Prometheus alert to have a project-specific promtool rule
-test. Grafana-managed alert definitions are optional; when present under
-`examples/grafana/alerting`, their metadata and expressions must mirror the
-Prometheus rules.
+test. The Grafana-managed alert definitions under `examples/grafana/alerting`
+must mirror the Prometheus expressions, hold times, severity, summaries, and
+descriptions.
 
 Build and smoke-test the Docker image:
 
@@ -283,6 +286,8 @@ The high-level design is documented in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 ## Alert Rules
 
 Example Prometheus alert rules live in [`examples/prometheus/prometheus-puppetfile-exporter.yml`](examples/prometheus/prometheus-puppetfile-exporter.yml).
+The provisioned Grafana-managed mirror lives in
+[`examples/grafana/alerting/prometheus-puppetfile-exporter.yml`](examples/grafana/alerting/prometheus-puppetfile-exporter.yml).
 They use `job=~"^(prometheus[_-])?puppetfile[_-]exporter$"` and cover exporter
 scrape availability, framework collection failure/staleness, unreadable and
 parse-invalid Puppetfiles, module source/domain problems, and read/parse error

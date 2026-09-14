@@ -1,0 +1,380 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: prometheus-puppetfile-exporter
+    folder: Exporters
+    interval: 1m
+    rules:
+      - uid: ppe-exporter-down
+        title: PuppetfileExporterDown
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model: &prometheus_query
+              datasource:
+                type: prometheus
+                uid: DS_PROMETHEUS
+              editorMode: code
+              expr: "up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - &result_present
+            refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: "$A >= 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Puppetfile exporter target is down on {{ $labels.instance }}
+          description: |
+            Prometheus has been unable to scrape prometheus-puppetfile-exporter on {{ $labels.instance }} for at least 5 minutes.
+        labels:
+          severity: critical
+        isPaused: false
+
+      - uid: ppe-collection-failed
+        title: PuppetfileExporterCollectionFailed
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_exporter_last_collection_success{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Puppetfile exporter collection failed on {{ $labels.instance }}
+          description: |
+            prometheus-puppetfile-exporter has reported unsuccessful background collections for at least 10 minutes.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-collection-stale
+        title: PuppetfileExporterCollectionStale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "time() - (puppetfile_exporter_last_successful_collection_timestamp_seconds{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} > 0) > 300"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Puppetfile exporter collection is stale on {{ $labels.instance }}
+          description: |
+            prometheus-puppetfile-exporter has not refreshed Puppetfile data successfully for more than 5 minutes.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-source-down
+        title: PuppetfileSourceDown
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Puppetfile source is unreadable
+          description: |
+            prometheus-puppetfile-exporter could not read Puppetfile for at least 10 minutes.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-parse-invalid
+        title: PuppetfileParseInvalid
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 1 and puppetfile_valid{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Puppetfile source contains invalid declarations
+          description: |
+            prometheus-puppetfile-exporter read Puppetfile but found unsupported or incomplete module declarations for at least 10 minutes.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-source-data-stale
+        title: PuppetfileSourceDataStale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_source_data_stale{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 1"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: Puppetfile source has stale valid data
+          description: |
+            The last valid data for {{ $labels.path }} is older than 5 minutes and subsequent refreshes have failed.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-puppetfile-stale
+        title: PuppetfileStale
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 90000
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_mtime_seconds{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} > 0 and time() - puppetfile_mtime_seconds{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} > 86400"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 1h
+        annotations:
+          summary: Puppetfile has not changed for more than 24 hours
+          description: |
+            The Puppetfile backing prometheus-puppetfile-exporter appears stale and has not been updated for more than 24 hours.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-no-supported-modules
+        title: PuppetfileNoSupportedModules
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 1 and puppetfile_modules_discovered{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: Puppetfile contains no supported pinned modules
+          description: |
+            Puppetfile was parsed successfully, but the exporter did not discover any supported pinned module declarations.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-unsupported-modules
+        title: PuppetfileUnsupportedModulesPresent
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 1 and puppetfile_unsupported_modules_count{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} > 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: Puppetfile contains unsupported module declarations
+          description: |
+            The exporter skipped one or more unsupported Puppetfile module declarations during recent scrapes.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-incomplete-modules
+        title: PuppetfileIncompleteModulesPresent
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_up{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 1 and puppetfile_incomplete_modules_count{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} > 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: Puppetfile contains incomplete module declarations
+          description: |
+            The exporter skipped one or more incomplete Puppetfile module declarations, such as unpinned Git modules.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-no-files-monitored
+        title: PuppetfileNoFilesMonitored
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_files_monitored{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: Puppetfile exporter monitors no files
+          description: |
+            No Puppetfile paths matched after glob expansion. Check that the configured path/glob pattern is correct.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-bad-module
+        title: PuppetfileBadModule
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "puppetfile_module_status{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"} == 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: Puppetfile module {{ $labels.module }} is unsupported or incomplete
+          description: |
+            Module {{ $labels.module }} in {{ $labels.path }} has status 0.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-read-errors
+        title: PuppetfileCollectorReadErrors
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "increase(puppetfile_read_errors_total{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"}[30m]) > 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        annotations:
+          summary: Puppetfile exporter encountered read errors
+          description: |
+            prometheus-puppetfile-exporter observed one or more Puppetfile read/open errors in the last 30 minutes.
+        labels:
+          severity: warning
+        isPaused: false
+
+      - uid: ppe-parse-errors
+        title: PuppetfileCollectorParseErrors
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: DS_PROMETHEUS
+            model:
+              <<: *prometheus_query
+              expr: "increase(puppetfile_parse_errors_total{job=~\"^(prometheus[_-])?puppetfile[_-]exporter$\"}[30m]) > 0"
+          - *result_present
+        noDataState: OK
+        execErrState: Error
+        for: 0m
+        annotations:
+          summary: Puppetfile exporter encountered parse errors
+          description: |
+            prometheus-puppetfile-exporter observed one or more Puppetfile parse errors in the last 30 minutes.
+        labels:
+          severity: warning
+        isPaused: false
